@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import qrcode from "qrcode-generator";
 import "./lib/claude-shim.js";
+import { assetUrl } from "./lib/claude-shim.js";
 
 window.XLSX = XLSX;
 window.qrcode = qrcode;
@@ -13,7 +14,7 @@ const money = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const dstr = t => new Date(t).toLocaleString("th-TH",{dateStyle:"short",timeStyle:"short"});
 const dlong = t => new Date(t).toLocaleDateString("th-TH",{year:"numeric",month:"long",day:"numeric"});
-const DEFAULT_SHOP = {name:"สายัน ตะวันออก ค้าเหล็ก", phone:"082-208-8188", tax:"", addr:""};
+const DEFAULT_SHOP = {name:"", phone:"", tax:"", addr:"", promptpay:""};
 
 let items=[], moves=[], buys=[], docs=[], cash=[], shop={...DEFAULT_SHOP};
 let cat="ทั้งหมด", docFilter="ทั้งหมด", buyFilter="ทั้งหมด", tab="stock", current=null, store, downloads=null, assets=null, sample=null, sampleImg=false;
@@ -50,6 +51,7 @@ async function init(){
   let db=null;
   try{ if(window.claude&&claude.use) db=await claude.use("db"); }catch(e){}
   store = db ? dbStore(db) : localStore(); wrapAudit();
+  checkLocalDemoMigration();
   try{ if(window.claude&&claude.use){ userCap=await claude.use("user"); if(userCap){ realOwner=!!userCap.isOwner(); try{ me=await userCap.id(); }catch(e){} } } }catch(e){}
   applyRole();
   $("#mode").innerHTML = db ? "<b>●</b> ออนไลน์" : "โหมดทดลอง"; $("#mode").title = db ? "ฐานข้อมูลออนไลน์ ซิงก์ทุกเครื่อง" : "บันทึกเฉพาะเครื่องนี้";
@@ -62,7 +64,7 @@ async function init(){
   store.sub("orders",{order:"at",limit:500},v=>{orders=v;renderDocs();});
   store.sub("customers",{},v=>{customers=v;fillCustList();if(docFilter==="ลูกค้า")renderCustDir();});
   store.sub("cash",{order:"at",limit:2000},v=>{cash=v;renderCash();renderProfit();});
-  store.sub("settings",{},v=>{ const s=v.find(x=>x.id==="shop"); shop={...DEFAULT_SHOP,...(s||{})}; const g=v.find(x=>x.id==="scrap"); grades=g&&Array.isArray(g.grades)?g.grades:[]; });
+  store.sub("settings",{},v=>{ const s=v.find(x=>x.id==="shop"); shop={...DEFAULT_SHOP,...(s||{})}; const g=v.find(x=>x.id==="scrap"); grades=g&&Array.isArray(g.grades)?g.grades:[]; $("#shopTitle").textContent = shop.name ? `คลังเหล็ก · ${shop.name}` : "คลังเหล็ก"; });
   try{ if(window.claude&&claude.use) downloads=await claude.use("downloads"); }catch(e){}
   $("#xlsBtn").hidden = !downloads; $("#vSave").hidden = !downloads;
   try{ assets=await claude.use("assets"); }catch(e){}
@@ -350,7 +352,7 @@ function openBuy(b){
   blines=b?legacyLines(b):[blankBLine()];
   $("#bImg").hidden=true;
   const ids=b?(b.photoIds||(b.photoId?[b.photoId]:[])):[];
-  ids.forEach((id,i)=>{ const im=document.createElement("img"); im.src="/_blob/"+id; im.alt="หน้า "+(i+1); im.onclick=()=>{ $("#iBig").src=im.src; $("#dImg").showModal(); }; $("#bThumbs").appendChild(im); });
+  ids.forEach((id,i)=>{ const im=document.createElement("img"); im.src=assetUrl(id); im.alt="หน้า "+(i+1); im.onclick=()=>{ $("#iBig").src=im.src; $("#dImg").showModal(); }; $("#bThumbs").appendChild(im); });
   clearAllWarns(fb); ocrState.fBuy={msg:"#bMsg",mismatch:"",read:false}; setMsg("#bMsg");
   $("#bPick").hidden=!!b; $("#bPick").firstChild.textContent="ถ่าย/เลือกรูปใบเสร็จ"; $("#bPick").disabled=false;
   showManual(!!b); $("#bManualBtn").hidden=!!b;
@@ -424,7 +426,7 @@ async function readBuyPhoto(){
   setMsg("#bMsg","info busy",`กำลังอ่านใบเสร็จ ${pendingPhotos.length} หน้า และคำนวณน้ำหนัก/ต้นทุน… (ราว 20–90 วินาที)`);
   const stock=items.slice(0,250).map(i=>({id:i.id,name:i.name,spec:i.spec,unit:i.unit}));
   const prompt=`You read ${pendingPhotos.length} photo(s) (pages of ONE document) of a Thai purchase document: receipt, tax invoice, delivery note (ใบส่งสินค้า ใบกำกับภาษี ใบเสร็จ บิลเงินสด ใบรับซื้อ).
-Context: OUR shop is the BUYER — "สายัน ตะวันออก ค้าเหล็ก" / "สายัน" in Chanthaburi (phone 08-2208-8188). Text in the customer box (นามลูกค้า/ที่อยู่/ลูกค้า) is US — never report it as the seller. The seller is the company that issued the document (letterhead, logo, footer, stamp). If the seller's name is not visible, return null.
+Context: OUR shop is the BUYER — ${JSON.stringify(shop.name||"ร้านเรา")} (phone ${JSON.stringify(shop.phone||"")}). Text in the customer box (นามลูกค้า/ที่อยู่/ลูกค้า) is US — never report it as the seller. The seller is the company that issued the document (letterhead, logo, footer, stamp). If the seller's name is not visible, return null.
 Read every printed and handwritten text and number. Reply with ONLY a JSON object, no markdown:
 {"seller": string|null, "phone": string|null (seller's phone), "billNo": string|null (document number เลขที่), "date": "YYYY-MM-DD"|null (convert พ.ศ. to C.E. by subtracting 543; 2-digit Thai year 69 = 2569),
  "kind": "new"|"used"|null (used = scrap / second-hand steel bought by weight),
@@ -1153,7 +1155,7 @@ $("#vPhone").addEventListener("click",async()=>{
   try{ await store.update("docs/"+viewing.id,{showPhone:show}); viewing={...viewing,showPhone:show}; openView(viewing); toast(show?"แสดงเบอร์โทรบนเอกสารแล้ว":"ซ่อนเบอร์โทรบนเอกสารแล้ว"); }
   catch(e){ toast("บันทึกไม่สำเร็จ"); }
 });
-$("#vPhoto").addEventListener("click",()=>{ if(viewing?.photoId){ $("#iBig").src="/_blob/"+viewing.photoId; $("#dImg").showModal(); } });
+$("#vPhoto").addEventListener("click",()=>{ if(viewing?.photoId){ $("#iBig").src=assetUrl(viewing.photoId); $("#dImg").showModal(); } });
 $("#vPrint").addEventListener("click",()=>{
   $("#printArea").innerHTML=paperHTML(viewing); $("#dView").close();
   setTimeout(()=>{ try{ window.print(); }catch(e){ toast("พิมพ์จากหน้านี้ไม่ได้ ใช้ปุ่มบันทึกไฟล์แทน"); } },50);
@@ -1812,7 +1814,7 @@ fs.addEventListener("submit",async e=>{
   if(e.submitter&&e.submitter.value!=="save") return;
   e.preventDefault(); if(!fs.reportValidity()) return;
   const v={}; for(const k of ["name","phone","tax","addr","promptpay"]) v[k]=fs[k].value.trim();
-  try{ await store.set("settings/shop",v); shop={...DEFAULT_SHOP,...v}; $("#dShop").close(); toast("บันทึกข้อมูลร้านแล้ว"); }catch(err){ toast("บันทึกไม่สำเร็จ"); }
+  try{ await store.set("settings/shop",v); shop={...DEFAULT_SHOP,...v}; $("#shopTitle").textContent = shop.name ? `คลังเหล็ก · ${shop.name}` : "คลังเหล็ก"; $("#dShop").close(); toast("บันทึกข้อมูลร้านแล้ว"); }catch(err){ toast("บันทึกไม่สำเร็จ"); }
 });
 
 /* ---------- Excel export ---------- */
@@ -1842,5 +1844,96 @@ $("#xlsBtn").addEventListener("click",async()=>{
 });
 
 let tt; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("show"),2400); }
+
+/* ---------- JSON backup & restore ---------- */
+$("#backupJsonBtn")?.addEventListener("click", async () => {
+  if (!downloads) return toast("ไม่สามารถดาวน์โหลดไฟล์ได้");
+  const data = {
+    version: 1,
+    exportedAt: Date.now(),
+    shop,
+    grades,
+    items,
+    moves,
+    buys,
+    docs,
+    cash,
+    closes,
+    prices: priceHist,
+    orders,
+    customers
+  };
+  const jsonStr = JSON.stringify(data, null, 2);
+  try {
+    await downloads.save({ filename: `คลังเหล็ก-สำรองข้อมูล-${today()}.json`, data: jsonStr });
+    toast("สำรองข้อมูลเป็นไฟล์ JSON แล้ว");
+  } catch (e) {
+    if (e?.code !== "declined") toast("สำรองข้อมูลไม่สำเร็จ");
+  }
+});
+
+$("#restoreJsonBtn")?.addEventListener("click", () => {
+  $("#restoreFile")?.click();
+});
+
+$("#restoreFile")?.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!confirm("ต้องการกู้คืนข้อมูลจากไฟล์นี้หรือไม่? (ข้อมูลที่มีอยู่จะถูกอัปเดต)")) return;
+    const collections = ["items", "moves", "buys", "docs", "cash", "closes", "orders", "customers"];
+    for (const col of collections) {
+      if (Array.isArray(data[col])) {
+        for (const item of data[col]) {
+          if (item?.id) await store.set(`${col}/${item.id}`, item);
+        }
+      }
+    }
+    if (data.shop) await store.set("settings/shop", data.shop);
+    if (data.grades) await store.set("settings/scrap", { grades: data.grades });
+    toast("กู้คืนข้อมูลสำเร็จ");
+  } catch (err) {
+    toast("ไฟล์ไม่ถูกต้องหรือไม่สามารถกู้คืนได้");
+  }
+});
+
+function checkLocalDemoMigration() {
+  if (store?.mode === "db") {
+    try {
+      const raw = localStorage.getItem("steel-stock-demo");
+      if (raw) {
+        const d = JSON.parse(raw);
+        const hasData = Object.values(d).some(v => v && (Array.isArray(v) ? v.length : Object.keys(v).length > 0));
+        if (hasData && $("#migrateLocalBtn")) {
+          $("#migrateLocalBtn").hidden = false;
+        }
+      }
+    } catch (e) {}
+  }
+}
+
+$("#migrateLocalBtn")?.addEventListener("click", async () => {
+  const raw = localStorage.getItem("steel-stock-demo");
+  if (!raw) return toast("ไม่มีข้อมูลในโหมดทดลอง");
+  if (!confirm("นำเข้าข้อมูลจากโหมดทดลองในเครื่องนี้ขึ้นฐานข้อมูลออนไลน์?")) return;
+  try {
+    const d = JSON.parse(raw);
+    for (const [col, val] of Object.entries(d)) {
+      if (!val) continue;
+      const list = Array.isArray(val) ? val : Object.entries(val).map(([id, v]) => ({ id, ...v }));
+      for (const item of list) {
+        if (item?.id) await store.set(`${col}/${item.id}`, item);
+      }
+    }
+    localStorage.removeItem("steel-stock-demo");
+    $("#migrateLocalBtn").hidden = true;
+    toast("ย้ายข้อมูลขึ้นฐานข้อมูลออนไลน์เรียบร้อยแล้ว");
+  } catch (e) {
+    toast("เกิดข้อผิดพลาดในการย้ายข้อมูล");
+  }
+});
 
 init();

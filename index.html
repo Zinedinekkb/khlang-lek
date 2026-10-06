@@ -34,7 +34,7 @@
   <header class="bar">
     <div class="stripe" aria-hidden="true"></div>
     <div class="barin">
-      <div><h1 id="pageTitle">สต็อก</h1><p class="sub" id="shopTitle">คลังเหล็ก · สายัน ตะวันออก ค้าเหล็ก</p></div>
+      <div><h1 id="pageTitle">สต็อก</h1><p class="sub" id="shopTitle">คลังเหล็ก</p></div>
       <div class="mode" id="mode">กำลังเชื่อมต่อ…</div>
     </div>
   </header>
@@ -85,6 +85,10 @@
         <button class="mi owner" id="importBtn"><span>นำเข้าสินค้าจาก Excel<small>ลงสต็อกหลายรายการทีเดียว</small></span><span aria-hidden="true">›</span></button>
         <button class="mi owner" id="xlsBtn" hidden><span>ส่งออก Excel<small>สต็อก ซื้อเข้า ขาย รายรับ-รายจ่าย</small></span><span aria-hidden="true">›</span></button>
         <button class="mi" id="shopBtn"><span>ข้อมูลร้านบนเอกสาร<small>ชื่อ ที่อยู่ เบอร์ เลขผู้เสียภาษี</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi" id="backupJsonBtn"><span>สำรองข้อมูลทั้งหมด (JSON)<small>ดาวน์โหลดข้อมูลทุกอย่างเก็บไว้เป็นไฟล์</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi" id="restoreJsonBtn"><span>กู้คืนข้อมูลจากไฟล์ JSON<small>นำเข้าข้อมูลสำรองกลับเข้าระบบ</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi" id="migrateLocalBtn" hidden><span>ย้ายข้อมูลจากโหมดทดลองขึ้นระบบออนไลน์<small>นำข้อมูลที่เคยบันทึกในเครื่องนี้ขึ้นฐานข้อมูล</small></span><span aria-hidden="true">›</span></button>
+        <input type="file" id="restoreFile" accept=".json" hidden>
       </div>
       <div class="menu" style="margin-top:10px"><div class="mi" style="cursor:default"><span>ผู้ใช้งาน<small id="roleInfo">—</small></span><label class="check owner-real" style="font-size:.8rem"><input type="checkbox" id="staffPrev"> ดูแบบลูกน้อง</label></div></div>
       <h4 class="sec">ประวัติเข้า-ออกสต็อก</h4>
