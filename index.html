@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>คลังเหล็ก — สต็อกสินค้า</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/styles.css">
+  <style id="paperCss">.paper{background:#fff;color:#111;font:14px/1.5 "IBM Plex Sans Thai",system-ui,sans-serif;padding:24px;max-width:760px;margin:0 auto;min-width:520px}
+.paper .ph{display:flex;justify-content:space-between;gap:16px;border-bottom:3px solid #1d262c;padding-bottom:10px}
+.paper .shop b{font-size:18px;display:block}
+.paper .shop{font-size:12.5px;color:#333}
+.paper .dt{text-align:right}
+.paper .dt h2{margin:0;font-size:20px}
+.paper .dt div{font-size:12.5px}
+.paper .cust{margin:12px 0;font-size:13px}
+.paper table{width:100%;border-collapse:collapse;font-size:13px}
+.paper th,.paper td{border:1px solid #bbb;padding:6px 8px;vertical-align:top}
+.paper th{background:#eef1f3;text-align:left}
+.paper td.r,.paper th.r{text-align:right;white-space:nowrap}
+.paper .tot{margin-top:8px;display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.paper .words{font-size:13px;padding:6px 10px;background:#eef1f3;border-radius:4px}
+.paper .tot table{width:auto;min-width:220px}
+.paper .note{font-size:12.5px;margin-top:10px;color:#333}
+.paper .sign{display:flex;justify-content:space-around;margin-top:46px;font-size:12.5px;text-align:center}
+.paper .sign div{border-top:1px solid #555;padding-top:4px;width:38%}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="bar">
+    <div class="stripe" aria-hidden="true"></div>
+    <div class="barin">
+      <div><h1 id="pageTitle">สต็อก</h1><p class="sub" id="shopTitle">คลังเหล็ก · สายัน ตะวันออก ค้าเหล็ก</p></div>
+      <div class="mode" id="mode">กำลังเชื่อมต่อ…</div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section id="tab-stock">
+      <div class="strip" aria-label="สรุปคลัง">
+        <div><b class="num" id="sCount">0</b><span>รายการ</span></div>
+        <div><b class="num" id="sValue">0</b><span>มูลค่า ฿</span></div>
+        <div><b class="num" id="sKg">0</b><span>กก.</span></div>
+        <div id="sLowBox"><b class="num" id="sLow">0</b><span>ใกล้หมด</span></div>
+      </div>
+      <div class="tools"><input id="q" type="search" placeholder="ค้นหา ชื่อ ขนาด ตำแหน่งวาง"></div>
+      <div class="chips" id="chips"></div>
+      <div class="list" id="list"></div>
+    </section>
+    <section id="tab-buy" hidden>
+      <div class="chips" id="buyChips"></div>
+      <div class="sumbar" id="buySum"></div>
+      <div class="list" id="buyList"></div>
+    </section>
+    <section id="tab-doc" hidden>
+      <div class="row" style="margin:0 0 10px"><button class="btn primary grow" id="qsOpen">⚡ ขายด่วน</button><button class="btn grow" id="ordNew">📝 จดออเดอร์</button><button class="btn grow" id="docNew">+ เอกสาร</button></div>
+      <div class="chips" id="docChips"></div>
+      <div class="list" id="docList"></div>
+    </section>
+    <section id="tab-money" hidden>
+      <div class="segbar" role="tablist">
+        <button role="tab" aria-selected="true" data-mv="cash">รับ-จ่าย</button>
+        <button role="tab" aria-selected="false" data-mv="profit" class="owner">กำไร</button>
+        <button role="tab" aria-selected="false" data-mv="report">รายงาน</button>
+        <button role="tab" aria-selected="false" data-mv="close">ปิดยอด</button>
+      </div>
+      <div id="alerts"></div>
+      <div id="tab-cash"><div class="chips" id="cashChips"></div><div id="cashBody"></div></div>
+      <div id="tab-profit" hidden><div class="chips" id="prChips"></div><div id="profitBody"></div></div>
+      <div id="tab-report" hidden><div class="chips" id="rpChips"></div><div id="reportBody"></div></div>
+      <div id="tab-close" hidden><div id="closeBody"></div></div>
+    </section>
+    <section id="tab-more" hidden>
+      <div class="menu">
+        <button class="mi" id="calcBtn"><span>คำนวณน้ำหนักเหล็ก<small>แผ่น กล่อง ท่อ เพลา ฉาก · เลือกหน่วยได้</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi owner" id="profitBtn"><span>คำนวณต้นทุน-กำไร<small>ตั้งราคาขายต่อ กก.</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi owner" id="priceCatBtn"><span>ปรับราคาทั้งหมวด<small>ราคาเหล็กขึ้น-ลง แก้ราคาต่อ กก. ทีเดียวทั้งหมวด</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi" id="countBtn"><span>ตรวจนับสต็อก<small>นับของจริง เทียบกับในระบบ</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi owner" id="scrapBtn"><span>ราคารับซื้อเหล็กเก่า<small>ตั้งราคาตามเกรด เหล็กหนา/บาง/เศษ</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi" id="scrapSellBtn"><span>ขายเศษให้โรงหลอม<small>ตัดสต็อกเหล็กเก่า บันทึกรายรับ</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi owner" id="importBtn"><span>นำเข้าสินค้าจาก Excel<small>ลงสต็อกหลายรายการทีเดียว</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi owner" id="xlsBtn" hidden><span>ส่งออก Excel<small>สต็อก ซื้อเข้า ขาย รายรับ-รายจ่าย</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi" id="shopBtn"><span>ข้อมูลร้านบนเอกสาร<small>ชื่อ ที่อยู่ เบอร์ เลขผู้เสียภาษี</small></span><span aria-hidden="true">›</span></button>
+      </div>
+      <div class="menu" style="margin-top:10px"><div class="mi" style="cursor:default"><span>ผู้ใช้งาน<small id="roleInfo">—</small></span><label class="check owner-real" style="font-size:.8rem"><input type="checkbox" id="staffPrev"> ดูแบบลูกน้อง</label></div></div>
+      <h4 class="sec">ประวัติเข้า-ออกสต็อก</h4>
+      <div class="log" id="log"></div>
+    </section>
+  </main>
+
+  <button class="fab" id="fab">+ เพิ่มสินค้า</button>
+  <div class="toast" id="toast" role="status"></div>
+
+  <nav class="tabbar" role="tablist" aria-label="เมนูหลัก">
+    <button role="tab" aria-selected="true" data-tab="stock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-5 9 5v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M7 20v-7h10v7M7 16h10"/></svg><span>สต็อก</span></button>
+    <button role="tab" aria-selected="false" data-tab="buy"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg><span>ซื้อเข้า</span></button>
+    <button role="tab" aria-selected="false" data-tab="doc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/></svg><span>ขาย</span></button>
+    <button role="tab" aria-selected="false" data-tab="money"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>การเงิน</span></button>
+    <button role="tab" aria-selected="false" data-tab="more"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>เพิ่มเติม</span></button>
+  </nav>
+</div>
+<div id="printArea"></div>
+
+<!-- Item detail / stock move -->
+<dialog id="dMove"><div class="sheet">
+  <h2 id="mName"></h2>
+  <div class="sub" id="mMeta"></div>
+  <div style="margin-top:12px"><span class="big num" id="mQty"></span> <span id="mUnit"></span> <span class="sub" id="mKg"></span></div>
+  <div class="stepper">
+    <button class="btn" data-step="-1" aria-label="ลด">−</button>
+    <input id="mAmt" type="number" inputmode="decimal" min="0" value="1" class="num" aria-label="จำนวน">
+    <button class="btn" data-step="1" aria-label="เพิ่ม">+</button>
+  </div>
+  <label>หมายเหตุ (ลูกค้า / ผู้ขาย)<input id="mNote" maxlength="120"></label>
+  <div class="row">
+    <button class="btn in grow" id="mIn">รับเข้า</button>
+    <button class="btn out grow" id="mOut">จ่ายออก (เต็ม)</button>
+  </div>
+  <div id="mCutBox" hidden>
+    <button class="btn primary" id="mCut" style="width:100%;margin-top:10px">✂ แบ่งขาย / ตัด</button>
+    <h4 class="sec" id="mRemLbl">ท่อนเหลือ</h4>
+    <div class="chips2" id="mRem"></div>
+    <div class="inrow" style="margin-top:8px">
+      <input id="mRemAddW" type="number" inputmode="decimal" min="0" step="any" placeholder="กว้าง มม." hidden>
+      <input id="mRemAdd" type="number" inputmode="decimal" min="0" step="any" placeholder="ยาว ม.">
+      <button class="btn" type="button" id="mRemBtn">+ เพิ่มท่อนที่มีอยู่</button>
+    </div>
+  </div>
+  <div class="row">
+    <button class="btn" id="mEdit">แก้ไขข้อมูล</button>
+    <button class="btn" id="mClose">ปิด</button>
+  </div>
+</div></dialog>
+
+<!-- Add / edit item -->
+<dialog id="dEdit"><form class="sheet" id="fEdit" method="dialog">
+  <h2 id="eTitle">เพิ่มสินค้า</h2>
+  <div class="grid" style="margin-top:12px">
+    <label class="full">ชื่อสินค้า<input name="name" required maxlength="80" placeholder="เช่น เหล็กกล่อง 2x4"></label>
+    <label>หมวด<select name="cat"></select></label>
+    <label>สภาพ<select name="cond"><option value="new">ใหม่</option><option value="used">มือสอง</option></select></label>
+    <label class="full">ขนาด / สเปก<input name="spec" maxlength="80" placeholder="เช่น หนา 2.3 มม. ยาว 6 ม."></label>
+    <label>จำนวนคงเหลือ<input name="qty" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <label>หน่วย<select name="unit"><option>เส้น</option><option>แผ่น</option><option>ท่อน</option><option>กก.</option><option>ชิ้น</option></select></label>
+    <div class="inrow full">
+      <label>น้ำหนักต่อหน่วย (กก.)<input name="kg" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+      <button class="btn" type="button" id="eCalc">คำนวณ</button>
+    </div>
+    <label id="eLenRow">ความยาวเต็มต่อเส้น (ม.)<input name="lenFull" type="number" inputmode="decimal" min="0" step="any" placeholder="6"></label>
+    <label id="eSheetRow">ขนาดแผ่นเต็ม กว้าง×ยาว (มม.)<span class="dim"><input name="sheetW" type="number" inputmode="decimal" min="0" step="any" placeholder="1219"><input name="sheetL" type="number" inputmode="decimal" min="0" step="any" placeholder="2438"></span></label>
+    <label>แจ้งเตือนเมื่อต่ำกว่า<input name="min" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <label class="owner">ต้นทุน/หน่วย (บาท)<input name="cost" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <label>ราคาขาย/หน่วย (บาท)<input name="price" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <div class="inrow full owner"><p class="hint grow" id="eMargin" style="flex:1;margin:0"></p><button class="btn" type="button" id="eProfit">คำนวณราคาขาย</button></div>
+    <label class="full">ตำแหน่งวางในคลัง<input name="loc" maxlength="40" placeholder="เช่น ชั้น A-2, ลานหลังร้าน"></label>
+  </div>
+  <div class="row">
+    <button class="btn primary grow" value="save">บันทึก</button>
+    <button class="btn" value="cancel" formnovalidate>ยกเลิก</button>
+  </div>
+  <div class="row"><button class="btn ghost" type="button" id="eDel" hidden>ลบสินค้านี้</button></div>
+</form></dialog>
+
+<!-- Weight calculator -->
+<dialog id="dCalc"><div class="sheet">
+  <h2>คำนวณน้ำหนักเหล็ก</h2>
+  <div class="grid" style="margin-top:12px">
+    <label class="full">รูปทรง<select id="cShape"></select></label>
+    <div class="grid full" id="cDims"></div>
+    <label>จำนวน (ชิ้น)<input id="cN" type="number" inputmode="decimal" min="0" step="any" value="1"></label>
+    <label>แสดงน้ำหนักเป็น<select id="cOut"><option value="1">กิโลกรัม (กก.)</option><option value="1000">ตัน</option><option value="0.1">ขีด</option><option value="0.45359237">ปอนด์ (lb)</option></select></label>
+    <label class="full">ราคาต่อ กก. (ถ้ามี)<input id="cPrice" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+  </div>
+  <p class="hint">เลือกหน่วยของแต่ละช่องได้ · 1 นิ้ว = 8 หุน = 25.4 มม. · 1 ฟุต = 12 นิ้ว · ความหนาแน่นเหล็ก 7.85 ผลเป็นค่าประมาณตามทฤษฎี · เมทัลชีทคิดจากหน้ากว้างก่อนรีดลอน (ทั่วไป 914 มม. หรือ 1,000/1,219 มม. ดูจากสเปกผู้ผลิต)</p>
+  <div class="result">
+    <div><span>ต่อชิ้น</span><span><span class="num" id="cOne">0</span> <span class="cU">กก.</span></span></div>
+    <div><span>รวม</span><span><span class="num" id="cAll">0</span> <span class="cU">กก.</span></span></div>
+    <div><span>ความยาวรวม / พื้นที่</span><span id="cExtra" class="sub"></span></div>
+    <div id="cMoneyRow" hidden><span>เป็นเงิน</span><span><span class="num" id="cMoney">0</span> บาท</span></div>
+  </div>
+  <div class="row">
+    <button class="btn primary grow" id="cUse" hidden>ใช้ค่านี้กับสินค้า</button>
+    <button class="btn" id="cClose">ปิด</button>
+  </div>
+</div></dialog>
+
+<!-- Purchase (used / new steel) -->
+<dialog id="dBuy"><form class="sheet" id="fBuy" method="dialog">
+  <h2 id="bTitle">บันทึกการซื้อเข้า</h2>
+  <div class="seg" style="margin-top:10px">
+    <label><input type="radio" name="kind" value="used" checked><span>รับซื้อเหล็กเก่า</span></label>
+    <label><input type="radio" name="kind" value="new"><span>ซื้อเหล็กใหม่</span></label>
+  </div>
+  <div class="photo">
+    <div class="thumbs" id="bThumbs"></div>
+    <img id="bImg" alt="รูปใบเสร็จ" hidden>
+    <button class="btn primary bigpick" type="button" id="bPick">ถ่าย/เลือกรูปใบเสร็จ<small>เลือกได้หลายหน้า · ระบบอ่านและสรุปรายการให้</small></button>
+    <div class="row" style="margin-top:6px">
+      <button class="btn grow" type="button" id="bRead" hidden>อ่านรูปอีกครั้ง</button>
+      <button class="btn grow" type="button" id="bManualBtn">ไม่มีรูป กรอกเอง</button>
+    </div>
+    <input type="file" id="bFile" accept="image/*" multiple hidden>
+    <div id="bMsg" hidden></div>
+  </div>
+  <div id="bManual" hidden>
+  <div id="bGrades" class="chips2" style="margin-top:10px"></div>
+  <div class="grid" style="margin-top:10px">
+    <label>ผู้ขาย / ร้านที่ซื้อ<input name="seller" maxlength="80"></label>
+    <label>เบอร์โทร<input name="phone" maxlength="20" inputmode="tel"></label>
+    <label>เลขที่บิล<input name="billNo" maxlength="40"></label>
+    <label>วันที่<input name="date" type="date"></label>
+  </div>
+  <div class="lines" id="bLines"></div>
+  <div class="row" style="margin-top:8px"><button class="btn" type="button" id="bAdd">+ เพิ่มรายการ</button></div>
+  <div class="result"><div><span>ยอดรวมที่จ่าย</span><span><span class="num" id="bTotal">0</span> บาท</span></div></div>
+  <div class="grid" style="margin-top:10px">
+    <label>การจ่ายเงิน<select name="payStatus"><option value="paid">จ่ายแล้ว</option><option value="credit">เครดิต (ค้างจ่าย)</option></select></label>
+    <label class="payVia">จ่ายด้วย<select name="payVia"><option>เงินสด</option><option>โอน</option></select></label>
+    <label class="payDue" hidden>ครบกำหนดจ่าย<input name="due" type="date"></label>
+  </div>
+  <div id="bPayInfo"></div>
+  <label style="margin-top:10px">หมายเหตุ<input name="note" maxlength="120"></label>
+  <p class="hint">เลือก "เข้าสต็อก" ในแต่ละรายการ ระบบจะเพิ่มจำนวนและปรับต้นทุนเฉลี่ยของสินค้านั้นให้</p>
+  <div class="row">
+    <button class="btn primary grow" value="save" id="bSave">บันทึก</button>
+    <button class="btn" value="cancel" formnovalidate>ยกเลิก</button>
+  </div>
+  </div>
+  <div class="row"><button class="btn ghost" type="button" id="bDel" hidden>ลบรายการนี้</button><button class="btn primary" type="button" id="bPayBtn" hidden>จ่ายเงิน</button><button class="btn" type="button" id="bClose2" style="margin-left:auto">ปิด</button></div>
+</form></dialog>
+
+<!-- Review extracted purchase before stock -->
+<dialog id="dReview"><form class="sheet" id="fRev" method="dialog">
+  <h2>ตรวจรายการก่อนเข้าสต็อก</h2>
+  <div id="rMsg" hidden></div>
+  <div class="grid" style="margin-top:10px">
+    <label>ผู้ขาย / ร้านที่ซื้อ<input name="seller" maxlength="80"></label>
+    <label>เลขที่บิล<input name="billNo" maxlength="40"></label>
+    <label>วันที่<input name="date" type="date"></label>
+    <label>ประเภท<select name="kind"><option value="new">ซื้อเหล็กใหม่</option><option value="used">รับซื้อเหล็กเก่า</option></select></label>
+    <label>ค่าขนส่ง/ค่าใช้จ่ายเพิ่ม<input name="ship" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <label>ราคาขายต่อ กก. (ใช้กับทุกรายการ)<input name="sellKg" type="number" inputmode="decimal" min="0" step="any" placeholder="เช่น 28"></label>
+    <label>การจ่ายเงิน<select name="payStatus"><option value="paid">จ่ายแล้ว</option><option value="credit">เครดิต (ค้างจ่าย)</option></select></label>
+    <label class="payVia">จ่ายด้วย<select name="payVia"><option>เงินสด</option><option>โอน</option></select></label>
+    <label class="payDue" hidden>ครบกำหนดจ่าย<input name="due" type="date"></label>
+  </div>
+  <p class="hint">ค่าขนส่งเฉลี่ยเข้าต้นทุนตามน้ำหนัก · ราคาขาย/เส้น = ราคาขายต่อ กก. × น้ำหนักต่อเส้น (ปัดขึ้นเป็นบาทเต็ม) · แก้ราคาต่อ กก. หรือต่อเส้นรายตัวได้</p>
+  <div id="rLines"></div>
+  <div class="result">
+    <div><span>ค่าสินค้า</span><span class="num" id="rGoods">0</span></div>
+    <div><span>ค่าขนส่ง/อื่นๆ</span><span class="num" id="rShip">0</span></div>
+    <div><span>รวมจ่าย</span><span><b class="num" id="rTotal">0</b> บาท</span></div>
+    <div><span>น้ำหนักรวม</span><span><span class="num" id="rKg">0</span> กก.</span></div>
+  </div>
+  <div class="row">
+    <button class="btn primary grow" value="save" id="rOk">ยืนยัน เข้าสต็อก</button>
+    <button class="btn" value="cancel" formnovalidate>ยกเลิก</button>
+  </div>
+</form></dialog>
+
+<!-- Cost / price / profit calculator -->
+<dialog id="dProfit"><div class="sheet">
+  <h2>คำนวณต้นทุน-ราคาขาย-กำไร</h2>
+  <div class="grid" style="margin-top:12px">
+    <label>ทุนซื้อต่อ กก. (ถ้าซื้อเป็นกิโล)<input id="pPpk" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+    <label>น้ำหนักต่อหน่วย (กก.)<input id="pKg" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+    <label>ต้นทุน/หน่วย (บาท)<input id="pCost" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <label>ค่าใช้จ่ายอื่น/หน่วย<input id="pExtra" type="number" inputmode="decimal" min="0" step="any" value="0" placeholder="ขนส่ง ค่าตัด"></label>
+    <label>ราคาขายต่อ กก. (บาท)<input id="pSellKg" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+    <label>ราคาขาย/หน่วย (บาท)<input id="pPrice" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <label class="full">จำนวนที่จะขาย<input id="pN" type="number" inputmode="decimal" min="0" step="any" value="1"></label>
+  </div>
+  <p class="hint" id="pHint">ใส่ราคาขายต่อ กก. ระบบคูณน้ำหนักเป็นราคาต่อหน่วยให้ หรือใส่ราคาต่อหน่วย ระบบบอกราคาต่อ กก. ให้</p>
+  <div class="result">
+    <div><span>ทุนรวม/หน่วย</span><span><span class="num" id="pTc">0</span> บาท</span></div>
+    <div><span>ทุนต่อ กก.</span><span><span class="num" id="pTk">0</span> บาท</span></div>
+    <div><span>กำไร/หน่วย</span><span><span class="num" id="pPu">0</span> บาท</span></div>
+    <div><span>กำไรต่อ กก.</span><span><span class="num" id="pPk">0</span> บาท</span></div>
+    <div><span>กำไรต่อยอดขาย</span><span><span class="num" id="pMg">0</span> %</span></div>
+    <div><span>กำไรรวม</span><span><span class="num" id="pAll">0</span> บาท</span></div>
+  </div>
+  <div class="row">
+    <button class="btn primary grow" id="pUse" hidden>ใช้ทุนและราคานี้กับสินค้า</button>
+    <button class="btn" id="pClose">ปิด</button>
+  </div>
+</div></dialog>
+
+<!-- Other income / expense -->
+<dialog id="dCash"><form class="sheet" id="fCash" method="dialog">
+  <h2 id="xTitle">บันทึกรายรับ-รายจ่าย</h2>
+  <div class="seg" style="margin-top:10px">
+    <label><input type="radio" name="type" value="out" checked><span>รายจ่าย</span></label>
+    <label><input type="radio" name="type" value="in"><span>รายรับ</span></label>
+  </div>
+  <div class="grid" style="margin-top:12px">
+    <label>หมวด<select name="cat"></select></label>
+    <label>จำนวนเงิน (บาท)<input name="amount" type="number" inputmode="decimal" min="0" step="any" required></label>
+    <label>วันที่<input name="date" type="date" required></label>
+    <label>จ่ายด้วย / รับทาง<select name="via"><option>เงินสด</option><option>โอน</option><option>อื่นๆ</option></select></label>
+    <label class="full">รายละเอียด<input name="note" maxlength="120" placeholder="เช่น ค่าแรงลูกน้อง 2 คน, ค่าน้ำมันรถส่งของ"></label>
+  </div>
+  <p class="hint">ยอดขายจากใบเสร็จ และการซื้อเข้าสต็อก ถูกนับในแดชบอร์ดให้อัตโนมัติ ไม่ต้องบันทึกซ้ำที่นี่</p>
+  <div class="row">
+    <button class="btn primary grow" value="save">บันทึก</button>
+    <button class="btn" value="cancel" formnovalidate>ยกเลิก</button>
+  </div>
+  <div class="row"><button class="btn ghost" type="button" id="xDel" hidden>ลบรายการนี้</button></div>
+</form></dialog>
+
+
+<!-- Cut / partial sale -->
+<dialog id="dCut"><div class="sheet">
+  <h2 id="kTitle">แบ่งขาย / ตัด</h2>
+  <p class="hint" id="kInfo"></p>
+  <div class="grid" style="margin-top:8px">
+    <label class="full" id="kLenRow">ความยาวที่ตัด<span class="dim"><input id="kX" type="number" inputmode="decimal" min="0" step="any"><select id="kXU"><option>ม.</option><option>ซม.</option><option>ฟุต</option><option>นิ้ว</option></select></span></label>
+    <div class="full grid" id="kAreaRow" style="margin:0">
+      <label>กว้าง<span class="dim"><input id="kW" type="number" inputmode="decimal" min="0" step="any"><select id="kWU"><option>มม.</option><option>ซม.</option><option>นิ้ว</option><option>ฟุต</option></select></span></label>
+      <label>ยาว<span class="dim"><input id="kL" type="number" inputmode="decimal" min="0" step="any"><select id="kLU"><option>มม.</option><option>ซม.</option><option>นิ้ว</option><option>ฟุต</option></select></span></label>
+    </div>
+    <label>จำนวนชิ้น/ท่อน<input id="kN" type="number" inputmode="numeric" min="1" step="1" value="1"></label>
+    <label>สั้นกว่านี้ = เศษ<span class="dim"><input id="kMin" type="number" inputmode="decimal" min="0" step="any"><span class="hint" id="kMinU" style="align-self:center;margin:0">ซม.</span></span></label>
+    <label id="kPkgRow">ราคาขาย/กก.<input id="kPkg" type="number" inputmode="decimal" min="0" step="any"></label>
+    <label>ค่าตัด/ชิ้น (บาท)<input id="kFee" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <label class="full check"><input type="checkbox" id="kOld" checked> ใช้ท่อน/แผ่นที่เหลืออยู่ก่อน</label>
+  </div>
+  <div id="kPlan" style="margin-top:8px"></div>
+  <div class="result" id="kRes" hidden>
+    <div><span>น้ำหนักที่ขาย</span><span><span class="num" id="kKg">0</span> กก.</span></div>
+    <div><span>ราคา/ชิ้น</span><span><span class="num" id="kPP">0</span> บาท</span></div>
+    <div><span>รวม</span><span><b class="num" id="kAll">0</b> บาท</span></div>
+    <div class="owner"><span>กำไร</span><span><span class="num" id="kPr">0</span></span></div>
+  </div>
+  <label id="kNoteRow" style="margin-top:8px">หมายเหตุ (ชื่อลูกค้า)<input id="kNote" maxlength="80"></label>
+  <div class="row">
+    <button class="btn primary grow" id="kStock">ตัดสต็อก (ขายหน้าร้าน)</button>
+    <button class="btn grow" id="kToDoc">ออกใบเสร็จ</button>
+    <button class="btn primary grow" id="kAdd" hidden>เพิ่มลงเอกสาร</button>
+  </div>
+  <div class="row"><button class="btn" id="kClose" style="margin-left:auto">ปิด</button></div>
+</div></dialog>
+
+
+<!-- Payment -->
+<dialog id="dPay"><form class="sheet" id="fPay" method="dialog">
+  <h2 id="yTitle">รับชำระ</h2><p class="hint" id="yInfo"></p>
+  <div class="grid" style="margin-top:10px">
+    <label>จำนวนเงิน<input name="amount" type="number" inputmode="decimal" min="0" step="any" required></label>
+    <label>ทาง<select name="via"><option>เงินสด</option><option>โอน</option></select></label>
+    <label class="full">วันที่<input name="date" type="date" required></label>
+  </div>
+  <div id="yQR"></div>
+  <div class="row"><button class="btn primary grow" value="save">บันทึก</button><button class="btn" value="cancel" formnovalidate>ยกเลิก</button></div>
+</form></dialog>
+
+<!-- Customer (receivables) -->
+<dialog id="dCust"><div class="sheet">
+  <h2 id="cuName"></h2><p class="hint" id="cuInfo"></p>
+  <div class="pgrid" id="cuSum"></div>
+  <button class="btn primary" id="cuPay" style="width:100%">รับชำระ (ตัดใบเก่าสุดก่อน)</button>
+  <h4 class="sec">ข้อมูลลูกค้า</h4>
+  <form id="fCu" class="grid" style="margin:10px 0">
+    <label>ชื่อลูกค้า<input name="name" maxlength="80" required></label>
+    <label>เบอร์โทร<input name="phone" maxlength="20" inputmode="tel"></label>
+    <label>ประเภท<select name="kind"><option>ทั่วไป</option><option>ช่าง/อู่</option><option>ผู้รับเหมา</option><option>ร้านค้า/บริษัท</option></select></label>
+    <label>เครดิต (วัน)<input name="creditDays" type="number" inputmode="numeric" min="0" step="1" placeholder="30"></label>
+    <label class="full">ที่อยู่ออกบิล<input name="addr" maxlength="200"></label>
+    <label class="full">ที่อยู่จัดส่ง / หน้างาน<input name="ship" maxlength="200"></label>
+    <label>เลขผู้เสียภาษี<input name="taxId" maxlength="20" inputmode="numeric"></label>
+    <label>LINE ID<input name="line" maxlength="40"></label>
+    <label class="full">หมายเหตุ<input name="note" maxlength="200" placeholder="เช่น ชอบเหล็กหนา, ต้องโทรก่อนส่ง"></label>
+    <div class="row full" style="margin:0"><button class="btn primary grow" type="submit">บันทึก</button><button class="btn" type="button" id="cuNewOrd">📝 จดออเดอร์</button><button class="btn" type="button" id="cuNewDoc">+ เอกสาร</button></div>
+  </form>
+  <h4 class="sec">ออเดอร์</h4><div id="cuOrders"></div>
+  <h4 class="sec">ประวัติการซื้อ</h4><div id="cuDocs"></div>
+  <div class="row"><button class="btn ghost" id="cuDel" hidden>ลบรายชื่อ</button><button class="btn" id="cuClose" style="margin-left:auto">ปิด</button></div>
+</div></dialog>
+
+<!-- Quick sale -->
+<dialog id="dQuick"><div class="sheet">
+  <h2>⚡ ขายด่วน</h2>
+  <input id="qsSearch" type="search" placeholder="ค้นหาสินค้า ชื่อ/ขนาด" style="width:100%;margin-top:8px;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg)">
+  <div id="qsResults" class="qsres"></div>
+  <h4 class="sec">ตะกร้า</h4>
+  <div id="qsCart"></div>
+  <div class="result"><div><span>ยอดรวม</span><span><b class="num" id="qsTotal">0</b> บาท</span></div><div class="owner"><span>กำไรประมาณ</span><span class="num" id="qsProfit">0</span></div></div>
+  <div class="seg" style="margin-top:10px">
+    <label><input type="radio" name="qsPay" value="เงินสด" checked><span>เงินสด</span></label>
+    <label><input type="radio" name="qsPay" value="โอน"><span>โอน</span></label>
+    <label><input type="radio" name="qsPay" value="credit"><span>ขายเชื่อ</span></label>
+  </div>
+  <div class="grid" style="margin-top:10px">
+    <label>ชื่อลูกค้า<input id="qsCust" maxlength="80" placeholder="ลูกค้าหน้าร้าน" list="custList" autocomplete="off"></label>
+    <label id="qsCashRow">รับเงินมา<input id="qsGot" type="number" inputmode="decimal" min="0" step="any"></label>
+  </div>
+  <p class="hint" id="qsChange"></p>
+  <div id="qsQR"></div>
+  <div class="row"><button class="btn primary grow" id="qsSave">บันทึกขาย</button><button class="btn" id="qsClose">ปิด</button></div>
+</div></dialog>
+
+<!-- Category price update -->
+<dialog id="dPriceCat"><div class="sheet">
+  <h2>ปรับราคาทั้งหมวด</h2>
+  <div class="grid" style="margin-top:10px">
+    <label>หมวด<select id="pcCat"></select></label>
+    <label>ชื่อมีคำว่า (ไม่ใส่ก็ได้)<input id="pcFilter" placeholder="เช่น ZM, กัลวาไนซ์"></label>
+    <label>ราคาขายใหม่ต่อ กก.<input id="pcKg" type="number" inputmode="decimal" min="0" step="any"></label>
+    <label>ปัดราคาต่อหน่วย<select id="pcRound"><option value="1">ขึ้นเป็นบาทเต็ม</option><option value="5">ขึ้นทีละ 5 บาท</option><option value="10">ขึ้นทีละ 10 บาท</option><option value="0">ไม่ปัด</option></select></label>
+  </div>
+  <div id="pcList"></div>
+  <div class="row"><button class="btn primary grow" id="pcApply">อัปเดตราคา</button><button class="btn" id="pcClose">ปิด</button></div>
+  <h4 class="sec">ประวัติการปรับราคา</h4><div id="pcHist"></div>
+</div></dialog>
+
+<!-- Stock count -->
+<dialog id="dCount"><div class="sheet">
+  <h2>ตรวจนับสต็อก</h2>
+  <p class="hint">ใส่จำนวน "เต็ม" ที่นับได้จริง ช่องที่ไม่ใส่ = ไม่เปลี่ยน · ท่อนเหลือแก้ได้ในหน้าสินค้า</p>
+  <div class="chips" id="ctChips"></div>
+  <div id="ctList"></div>
+  <div class="grid" style="margin-top:10px">
+    <label>เหตุผลส่วนต่าง<select id="ctReason"><option>นับผิด/ลงข้อมูลผิด</option><option>ของหาย</option><option>ชำรุด/เสียหาย</option><option>ใช้ในร้าน</option><option>อื่นๆ</option></select></label>
+    <div class="result" style="margin-top:0"><div><span>ส่วนต่าง</span><span class="num" id="ctDiff">0</span></div></div>
+  </div>
+  <div class="row"><button class="btn primary grow" id="ctSave">บันทึกผลนับ</button><button class="btn" id="ctClose">ปิด</button></div>
+</div></dialog>
+
+<!-- Import -->
+<dialog id="dImport"><div class="sheet">
+  <h2>นำเข้าสินค้าจาก Excel</h2>
+  <p class="hint">ใช้หัวตารางแบบไฟล์ตัวอย่าง (หรือไฟล์ที่ส่งออกจากระบบนี้) · สินค้าชื่อ+ขนาดตรงกับของเดิมจะถูกอัปเดต ที่เหลือเพิ่มใหม่</p>
+  <div class="row"><button class="btn grow" id="imTpl">ดาวน์โหลดไฟล์ตัวอย่าง</button><button class="btn primary grow" id="imPick">เลือกไฟล์ Excel/CSV</button></div>
+  <input type="file" id="imFile" accept=".xlsx,.xls,.csv" hidden>
+  <div id="imPrev"></div>
+  <div class="row"><button class="btn primary grow" id="imApply" hidden>นำเข้า</button><button class="btn" id="imClose">ปิด</button></div>
+</div></dialog>
+
+<!-- Scrap grades -->
+<dialog id="dScrap"><div class="sheet">
+  <h2>ราคารับซื้อเหล็กเก่า</h2>
+  <p class="hint">ใช้เป็นปุ่มลัดตอนรับซื้อ และเป็นราคาขายต่อให้โรงหลอม</p>
+  <div id="sgList"></div>
+  <div class="row"><button class="btn grow" id="sgAdd">+ เพิ่มเกรด</button><button class="btn primary grow" id="sgSave">บันทึก</button><button class="btn" id="sgClose">ปิด</button></div>
+</div></dialog>
+
+<!-- Sell scrap -->
+<dialog id="dScrapSell"><form class="sheet" id="fSS" method="dialog">
+  <h2>ขายเศษให้โรงหลอม</h2>
+  <div class="grid" style="margin-top:10px">
+    <label class="full">จากสต็อก<select name="item" required></select></label>
+    <label>น้ำหนัก (กก.)<input name="kg" type="number" inputmode="decimal" min="0" step="any" required></label>
+    <label>ราคาขาย/กก.<input name="ppk" type="number" inputmode="decimal" min="0" step="any" required></label>
+    <label>ผู้ซื้อ (โรงหลอม/ร้านรับซื้อ)<input name="buyer" maxlength="60"></label>
+    <label>รับเงินทาง<select name="via"><option>เงินสด</option><option>โอน</option></select></label>
+  </div>
+  <div class="result"><div><span>ได้เงิน</span><span><b class="num" id="ssTotal">0</b> บาท</span></div><div class="owner"><span>กำไร</span><span class="num" id="ssProfit">0</span></div></div>
+  <div class="row"><button class="btn primary grow" value="save">บันทึกการขาย</button><button class="btn" value="cancel" formnovalidate>ยกเลิก</button></div>
+</form></dialog>
+
+
+<!-- Customer order (to source) -->
+<dialog id="dOrder"><form class="sheet" id="fOrd" method="dialog">
+  <h2 id="oTitle">จดออเดอร์ลูกค้า</h2>
+  <div class="grid" style="margin-top:10px">
+    <label class="full">ชื่อลูกค้า (พิมพ์ชื่อหรือเบอร์เพื่อค้นหาลูกค้าเก่า)<input name="customer" maxlength="80" required autocomplete="off"></label>
+    <label>เบอร์โทร<input name="phone" maxlength="20" inputmode="tel"></label>
+    <label>สั่งทาง<select name="channel"><option>โทรศัพท์</option><option>LINE</option><option>หน้าร้าน</option><option>อื่นๆ</option></select></label>
+    <label>ต้องการวันที่<input name="need" type="date"></label>
+    <label>สถานะ<select name="status"><option value="new">รอจัดหา</option><option value="ordered">สั่งของแล้ว</option><option value="ready">ของพร้อม</option><option value="quoted">ออกใบเสนอราคาแล้ว</option><option value="done">ส่ง/ขายแล้ว</option><option value="cancel">ยกเลิก</option></select></label>
+    <label>มัดจำ (บาท)<input name="deposit" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <label>การรับสินค้า<select name="ful"><option value="pickup">ลูกค้ามารับเอง</option><option value="ship">จัดส่ง</option></select></label>
+    <label class="shipF" hidden>วันที่ส่ง<input name="shipDate" type="date"></label>
+    <label class="full shipF" hidden>ที่อยู่จัดส่ง<input name="shipAddr" maxlength="200" placeholder="บ้านเลขที่ หมู่ ตำบล / หน้างาน / จุดสังเกต"></label>
+    <label class="shipF" hidden>เบอร์ผู้รับหน้างาน<input name="shipPhone" maxlength="20" inputmode="tel"></label>
+    <label class="shipF" hidden>ค่าจัดส่ง (บาท)<input name="shipFee" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+  </div>
+  <label style="margin-top:10px">พิมพ์รายการตามที่ลูกค้าบอก (บรรทัดละรายการ)<textarea id="oQuick" rows="3" placeholder="เช่น&#10;ท่อเหลี่ยม 2x2 หนา 1.2 10 เส้น&#10;เหล็กฉาก 1.5 นิ้ว หนา 3 5 เส้น&#10;แผ่นตะแกรงฉีก 2 แผ่น" style="padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font:inherit;color:inherit;resize:vertical"></textarea></label>
+  <div class="row" style="margin-top:6px"><button class="btn grow" type="button" id="oParse">แปลงเป็นรายการ ↓</button><button class="btn" type="button" id="oAdd">+ เพิ่มบรรทัด</button></div>
+  <div class="lines" id="oLines"></div>
+  <div class="result"><div><span>ยอดประมาณ</span><span><b class="num" id="oTotal">0</b> บาท</span></div><div class="owner"><span>กำไรประมาณ</span><span class="num" id="oProfit">0</span></div></div>
+  <label style="margin-top:10px">หมายเหตุ (แหล่งของ / เงื่อนไขส่ง)<input name="note" maxlength="200"></label>
+  <p class="hint" id="oLink"></p>
+  <div class="row">
+    <button class="btn primary grow" value="save">บันทึกออเดอร์</button>
+    <button class="btn" value="cancel" formnovalidate>ปิด</button>
+  </div>
+  <div class="row" id="oActs" hidden>
+    <button class="btn grow" type="button" id="oQuote">ออกใบเสนอราคา</button>
+    <button class="btn grow" type="button" id="oSell">ออกใบเสร็จ/ใบส่งของ</button>
+  </div>
+  <div class="row"><button class="btn ghost" type="button" id="oDel" hidden>ลบออเดอร์</button></div>
+</form></dialog>
+
+<datalist id="custList"></datalist>
+<!-- Photo viewer -->
+<dialog id="dImg"><div class="sheet"><img id="iBig" alt="รูปใบเสร็จ" style="width:100%;border-radius:6px"><div class="row"><button class="btn grow" id="iClose">ปิด</button></div></div></dialog>
+
+<!-- Quote / receipt editor -->
+<dialog id="dDoc"><form class="sheet" id="fDoc" method="dialog">
+  <h2>ออกเอกสาร</h2>
+  <div class="photo">
+    <img id="dImgPrev" alt="รูปแนบ" hidden>
+    <div class="row" style="margin-top:0">
+      <button class="btn grow" type="button" id="dPickImg">แนบรูป (ใบสั่งของ / รายการลูกค้า)</button>
+      <button class="btn primary grow" type="button" id="dRead" hidden>อ่านรูปอีกครั้ง</button>
+    </div>
+    <input type="file" id="dFile" accept="image/*" hidden>
+    <div id="dMsg" hidden></div>
+  </div>
+  <div class="grid" style="margin-top:12px">
+    <label>ประเภท<select name="type"><option value="quote">ใบเสนอราคา</option><option value="receipt">ใบเสร็จรับเงิน (จ่ายแล้ว)</option><option value="credit">ใบส่งของ (ขายเชื่อ)</option></select></label>
+    <label>วันที่<input name="date" type="date" required></label>
+    <label class="full">ชื่อลูกค้า (พิมพ์ชื่อหรือเบอร์เพื่อค้นหาลูกค้าเก่า)<input name="customer" maxlength="80" required autocomplete="off"></label>
+    <label>เบอร์โทรลูกค้า (ไม่ใส่ก็ได้)<input name="phone" maxlength="20" inputmode="tel"></label>
+    <label class="full">ที่อยู่ลูกค้า/ออกบิล (ไม่ใส่ก็ได้)<input name="addr" maxlength="160"></label>
+    <label>การรับสินค้า<select name="ful"><option value="pickup">ลูกค้ามารับเอง</option><option value="ship">จัดส่ง</option></select></label>
+    <label class="shipF" hidden>วันที่ส่ง<input name="shipDate" type="date"></label>
+    <label class="full shipF" hidden>ที่อยู่จัดส่ง<input name="shipAddr" maxlength="200" placeholder="บ้านเลขที่ หมู่ ตำบล / หน้างาน / จุดสังเกต"></label>
+    <label class="shipF" hidden>เบอร์ผู้รับหน้างาน<input name="shipPhone" maxlength="20" inputmode="tel"></label>
+    <label class="shipF" hidden>ค่าจัดส่ง (บาท)<input name="shipFee" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+
+  </div>
+  <div class="inrow" style="margin-top:12px">
+    <label>เพิ่มจากสต็อก<select id="dPick"></select></label>
+    <button class="btn" type="button" id="dBlank">+ บรรทัดเปล่า</button>
+  </div>
+  <label style="margin-top:8px">✂ แบ่งขาย (ตัดตามขนาด)<select id="dPickCut"></select></label>
+  <div class="lines" id="dLines"></div>
+  <div class="grid" style="margin-top:10px">
+    <label>ส่วนลด (บาท)<input name="discount" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <div class="result" style="margin-top:0"><div><span>สุทธิ</span><span><span class="num" id="dTotal">0</span></span></div></div>
+    <p class="hint full owner" id="dProfitEst" style="margin:0"></p>
+    <label class="full">หมายเหตุบนเอกสาร<input name="note" maxlength="160"></label>
+    <label class="full check"><input type="checkbox" name="showPhone" checked> แสดงเบอร์โทรบนเอกสาร (ร้านและลูกค้า)</label>
+    <label id="viaWrap">รับเงินทาง<select name="via"><option>เงินสด</option><option>โอน</option></select></label>
+    <label id="dueWrap" hidden>เครดิต (วัน)<input name="dueDays" type="number" inputmode="numeric" min="0" step="1" value="30"></label>
+    <label class="full check" id="cutWrap"><input type="checkbox" name="cut" checked> ตัดสต็อกสินค้าที่ขาย</label>
+  </div>
+  <div class="row">
+    <button class="btn primary grow" value="save">บันทึกเอกสาร</button>
+    <button class="btn" value="cancel" formnovalidate>ยกเลิก</button>
+  </div>
+</form></dialog>
+
+<!-- Document preview -->
+<dialog id="dView"><div class="sheet">
+  <div class="preview" id="vPaper"></div>
+  <div class="row">
+    <button class="btn primary grow" id="vPrint">พิมพ์</button>
+    <button class="btn grow" id="vSave" hidden>บันทึกไฟล์</button>
+    <button class="btn grow" id="vConvert" hidden>ออกใบเสร็จจากใบนี้</button>
+    <button class="btn grow" id="vPhoto" hidden>ดูรูปแนบ</button>
+    <button class="btn grow" id="vPhone">ซ่อนเบอร์โทร</button>
+    <button class="btn primary grow" id="vPay" hidden>รับชำระ</button>
+    <button class="btn grow" id="vShip" hidden>✓ ส่งของแล้ว</button>
+  </div>
+  <div class="row">
+    <button class="btn ghost" id="vDel">ลบเอกสาร</button>
+    <button class="btn" id="vClose" style="margin-left:auto">ปิด</button>
+  </div>
+</div></dialog>
+
+<!-- Shop info -->
+<dialog id="dShop"><form class="sheet" id="fShop" method="dialog">
+  <h2>ข้อมูลร้านบนเอกสาร</h2>
+  <div class="grid" style="margin-top:12px">
+    <label class="full">ชื่อร้าน<input name="name" maxlength="80" required></label>
+    <label>เบอร์โทร<input name="phone" maxlength="30"></label>
+    <label>เลขผู้เสียภาษี (ถ้ามี)<input name="tax" maxlength="20"></label>
+    <label class="full">พร้อมเพย์ (เบอร์มือถือหรือเลขบัตร/ผู้เสียภาษี 13 หลัก)<input name="promptpay" maxlength="20" inputmode="numeric" placeholder="เช่น 0822088188"></label>
+    <label class="full">ที่อยู่<input name="addr" maxlength="200"></label>
+  </div>
+  <div class="row">
+    <button class="btn primary grow" value="save">บันทึก</button>
+    <button class="btn" value="cancel" formnovalidate>ยกเลิก</button>
+  </div>
+</form></dialog>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
