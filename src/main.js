@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import qrcode from "qrcode-generator";
+import "./lib/claude-shim.js";
 
 window.XLSX = XLSX;
 window.qrcode = qrcode;

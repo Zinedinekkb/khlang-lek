@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    // Initial development rules - will be restricted with Auth & roles in Phase 3
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
