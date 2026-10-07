@@ -2,6 +2,20 @@ import * as XLSX from "xlsx";
 import qrcode from "qrcode-generator";
 import "./lib/claude-shim.js";
 import { assetUrl } from "./lib/claude-shim.js";
+import {
+  initAuth,
+  subscribeAuth,
+  getAuthState,
+  loginUser,
+  registerUser,
+  logoutUser,
+  resetPassword,
+  approveUser,
+  disableUser,
+  updateUserRole,
+  deleteUserRecord,
+  subscribeAllUsers
+} from "./lib/auth.js";
 
 window.XLSX = XLSX;
 window.qrcode = qrcode;
@@ -69,6 +83,10 @@ async function init(){
   $("#xlsBtn").hidden = !downloads; $("#vSave").hidden = !downloads;
   try{ assets=await claude.use("assets"); }catch(e){}
   try{ sample=await claude.use("sample"); const lim=sample&&await sample.limits().catch(()=>null); sampleImg=!!sample; }catch(e){}
+
+  // Initialize Firebase Auth & Realtime Profile Sync
+  subscribeAuth(handleAuthStateChange);
+  initAuth();
 }
 
 /* ---------- render ---------- */
@@ -1250,195 +1268,458 @@ $("#vDel").addEventListener("click",async()=>{
   try{ await store.del("docs/"+viewing.id); $("#dView").close(); toast("ลบเอกสารแล้ว"); }catch(e){ toast("ลบไม่สำเร็จ"); }
 });
 
-/* ===================== roles, PIN authentication, audit ===================== */
-let currentRole = localStorage.getItem("khlang_lek_role") || "owner";
-let userCap = null, me = "", realOwner = (currentRole === "owner"), staffPreview = false;
+/* ===================== Authentication, Roles & User Management ===================== */
+let currentRole = "owner";
+let userCap = null, me = "", realOwner = true, staffPreview = false;
 const isStaff = () => !realOwner || staffPreview;
 
 function applyRole(){
-  realOwner = (currentRole === "owner");
-  document.body.classList.toggle("staff", isStaff());
+  const isActualStaff = isStaff();
+  document.body.classList.toggle("staff", isActualStaff);
   document.body.classList.toggle("realstaff", !realOwner);
-  const roleBtn = $("#roleBtn");
-  if(roleBtn){
-    const icon = $("#roleIcon"); if(icon) icon.textContent = realOwner ? "👑" : "👤";
-    const text = $("#roleText"); if(text) text.textContent = realOwner ? "เจ้าของ" : "ลูกน้อง";
-    roleBtn.title = realOwner ? "สิทธิ์: เจ้าของร้าน (แตะเพื่อสลับเป็นลูกน้อง/ล็อก)" : "สิทธิ์: ลูกน้อง (แตะเพื่อใส่รหัสปลดล็อกเจ้าของร้าน)";
+  const userBtn = $("#userBadgeBtn");
+  if(userBtn){
+    const icon = $("#userRoleIcon"); if(icon) icon.textContent = realOwner ? "👑" : "👤";
+    const text = $("#userNameText");
+    const currentName = getAuthState().profile?.displayName || getAuthState().user?.email?.split("@")[0] || (realOwner ? "เจ้าของ" : "ลูกน้อง");
+    if(text) text.textContent = currentName;
+    userBtn.title = realOwner ? `สิทธิ์: เจ้าของร้าน (${currentName})` : `สิทธิ์: ลูกน้อง/พนักงาน (${currentName})`;
   }
   const roleInfo = $("#roleInfo");
   if(roleInfo){
-    roleInfo.textContent = realOwner ? (staffPreview ? "เจ้าของ (กำลังดูแบบลูกน้อง: ไม่เห็นต้นทุน/กำไร)" : "เจ้าของร้าน — มีสิทธิ์เต็มทุกฟังก์ชัน") : "ลูกน้อง (แคชเชียร์) — ซ่อนต้นทุนและกำไร";
+    roleInfo.textContent = realOwner ? (staffPreview ? "เจ้าของ (กำลังดูแบบลูกน้อง: ซ่อนต้นทุน/กำไร)" : "เจ้าของร้าน — มีสิทธิ์เต็มทุกฟังก์ชัน") : "ลูกน้อง (แคชเชียร์) — ซ่อนต้นทุนและกำไร";
   }
   if(isStaff() && moneyView === "profit") {
     const cashTab = document.querySelector('.segbar [data-mv=cash]');
     if(cashTab) cashTab.click();
   }
 }
-$("#staffPrev")?.addEventListener("change", e => { staffPreview = e.target.checked; applyRole(); render(); });
 
-/* ---------- PIN Keypad Controller ---------- */
-let pinBuffer = "";
-let pinActiveOptions = null;
+function handleAuthStateChange(auth){
+  if(auth.loading) return;
 
-function updatePinDots(len = 4){
-  const dotsContainer = $("#pinDots");
-  if(!dotsContainer) return;
-  let html = "";
-  for(let i = 0; i < len; i++){
-    html += `<span class="dot ${i < pinBuffer.length ? 'filled' : ''}"></span>`;
-  }
-  dotsContainer.innerHTML = html;
-}
+  if(!auth.user){
+    // User signed out -> open Auth modal
+    if(!$("#dAuth").open) $("#dAuth").showModal();
+    if($("#dPending")?.open) $("#dPending").close();
+    if($("#dUsers")?.open) $("#dUsers").close();
+    if($("#dUserMenu")?.open) $("#dUserMenu").close();
 
-function openPinPad({ title, desc, avatar = "🔐", hint, maxLen = 4, target = "any", onDone, cancellable = true }){
-  pinBuffer = "";
-  pinActiveOptions = { title, desc, avatar, hint, maxLen, target, onDone, cancellable };
-  if($("#pinAvatar")) $("#pinAvatar").textContent = avatar;
-  if($("#pinTitle")) $("#pinTitle").textContent = title || "ใส่รหัส PIN";
-  if($("#pinDesc")) $("#pinDesc").textContent = desc || "กรุณากรอกรหัส PIN 4 หลัก";
-  if($("#pinError")) $("#pinError").textContent = "";
-  const cancelBtn = $("#pinCancelBtn");
-  if(cancelBtn) cancelBtn.style.display = cancellable ? "inline-block" : "none";
-  if(hint !== undefined && $("#pinHint")) $("#pinHint").innerHTML = hint;
-  updatePinDots(maxLen);
-  if(!$("#dPin").open) $("#dPin").showModal();
-}
-
-function onPinDigit(digit){
-  if(!pinActiveOptions) return;
-  const max = pinActiveOptions.maxLen || 4;
-  if(pinBuffer.length >= max) return;
-  pinBuffer += digit;
-  updatePinDots(max);
-  if($("#pinError")) $("#pinError").textContent = "";
-  if(pinBuffer.length >= max){
-    setTimeout(verifyEnteredPin, 60);
-  }
-}
-
-function onPinBackspace(){
-  if(!pinActiveOptions || !pinBuffer.length) return;
-  pinBuffer = pinBuffer.slice(0, -1);
-  updatePinDots(pinActiveOptions.maxLen || 4);
-  if($("#pinError")) $("#pinError").textContent = "";
-}
-
-function onPinClear(){
-  if(!pinActiveOptions) return;
-  pinBuffer = "";
-  updatePinDots(pinActiveOptions.maxLen || 4);
-  if($("#pinError")) $("#pinError").textContent = "";
-}
-
-function verifyEnteredPin(){
-  if(!pinActiveOptions) return;
-  const ownerPin = String(shop.ownerPin || "8888").trim();
-  const staffPin = String(shop.staffPin || "1111").trim();
-  const entered = pinBuffer;
-  const target = pinActiveOptions.target;
-
-  let success = false;
-  let resolvedRole = "";
-
-  if(target === "owner"){
-    if(entered === ownerPin){ success = true; resolvedRole = "owner"; }
-  } else if(target === "staff"){
-    if(entered === staffPin){ success = true; resolvedRole = "staff"; }
-  } else {
-    if(entered === ownerPin){ success = true; resolvedRole = "owner"; }
-    else if(entered === staffPin){ success = true; resolvedRole = "staff"; }
+    currentRole = "staff";
+    realOwner = false;
+    applyRole();
+    const nameEl = $("#userNameText"); if(nameEl) nameEl.textContent = "เข้าสู่ระบบ";
+    const iconEl = $("#userRoleIcon"); if(iconEl) iconEl.textContent = "👤";
+    const moreEmail = $("#moreUserEmail"); if(moreEmail) moreEmail.textContent = "ยังไม่ได้เข้าสู่ระบบ";
+    const moreRole = $("#roleInfo"); if(moreRole) moreRole.textContent = "กรุณาเข้าสู่ระบบ";
+    return;
   }
 
-  if(success){
-    $("#dPin").close();
-    const cb = pinActiveOptions.onDone;
-    pinActiveOptions = null;
-    pinBuffer = "";
-    if(cb) cb(resolvedRole);
-  } else {
-    const dots = $("#pinDots");
-    if(dots){
-      dots.classList.add("shake");
-      setTimeout(() => dots.classList.remove("shake"), 400);
+  // User signed in
+  if($("#dAuth")?.open) $("#dAuth").close();
+
+  const profile = auth.profile;
+  if(!profile || profile.status === "pending"){
+    // User is awaiting approval
+    if($("#dUsers")?.open) $("#dUsers").close();
+    if($("#dUserMenu")?.open) $("#dUserMenu").close();
+
+    const pName = profile?.displayName || auth.user.displayName || auth.user.email.split("@")[0];
+    const pNameEl = $("#pendingCardName"); if(pNameEl) pNameEl.textContent = pName;
+    const pEmailEl = $("#pendingCardEmail"); if(pEmailEl) pEmailEl.textContent = auth.user.email;
+    if(!$("#dPending").open) $("#dPending").showModal();
+
+    currentRole = "staff";
+    realOwner = false;
+    applyRole();
+    return;
+  }
+
+  if(profile.status === "disabled"){
+    if($("#dPending")?.open) $("#dPending").close();
+    alert("บัญชีของคุณถูกระงับสิทธิ์การใช้งาน กรุณาติดต่อเจ้าของร้าน");
+    logoutUser();
+    return;
+  }
+
+  // User is approved!
+  if($("#dPending")?.open){
+    $("#dPending").close();
+    toast(`ยินดีต้อนรับคุณ ${profile.displayName || auth.user.email.split("@")[0]} 🎉`);
+  }
+
+  currentRole = profile.role || "staff";
+  realOwner = (currentRole === "owner");
+  me = profile.displayName || auth.user.email;
+
+  const currentDisplayName = profile.displayName || auth.user.email.split("@")[0];
+  const nameEl = $("#userNameText"); if(nameEl) nameEl.textContent = currentDisplayName;
+  const iconEl = $("#userRoleIcon"); if(iconEl) iconEl.textContent = realOwner ? "👑" : "👤";
+  const moreEmail = $("#moreUserEmail"); if(moreEmail) moreEmail.textContent = auth.user.email;
+
+  applyRole();
+  render();
+  renderProfit();
+}
+
+/* Prevent accidental escape on mandatory modals */
+$("#dAuth")?.addEventListener("cancel", (e) => {
+  if(!getAuthState().user) e.preventDefault();
+});
+$("#dPending")?.addEventListener("cancel", (e) => {
+  if(getAuthState().profile?.status === "pending") e.preventDefault();
+});
+
+/* Auth Modal Tab Switcher */
+$("#tabSignInBtn")?.addEventListener("click", () => {
+  $("#tabSignInBtn").classList.add("on");
+  $("#tabSignInBtn").setAttribute("aria-selected", "true");
+  $("#tabSignUpBtn").classList.remove("on");
+  $("#tabSignUpBtn").setAttribute("aria-selected", "false");
+  $("#fSignIn").hidden = false;
+  $("#fSignUp").hidden = true;
+  $("#siError").hidden = true;
+  $("#suError").hidden = true;
+});
+
+$("#tabSignUpBtn")?.addEventListener("click", () => {
+  $("#tabSignUpBtn").classList.add("on");
+  $("#tabSignUpBtn").setAttribute("aria-selected", "true");
+  $("#tabSignInBtn").classList.remove("on");
+  $("#tabSignInBtn").setAttribute("aria-selected", "false");
+  $("#fSignUp").hidden = false;
+  $("#fSignIn").hidden = true;
+  $("#siError").hidden = true;
+  $("#suError").hidden = true;
+});
+
+/* Password Show/Hide Toggle */
+document.querySelectorAll(".pwd-toggle-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const targetId = btn.dataset.target;
+    const input = document.getElementById(targetId);
+    if(!input) return;
+    const isPwd = input.type === "password";
+    input.type = isPwd ? "text" : "password";
+    const eyeOpen = btn.querySelector(".eye-open");
+    const eyeClose = btn.querySelector(".eye-close");
+    if(eyeOpen) eyeOpen.hidden = isPwd;
+    if(eyeClose) eyeClose.hidden = !isPwd;
+    btn.setAttribute("aria-label", isPwd ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน");
+  });
+});
+
+/* Sign In Submit */
+$("#fSignIn")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errBox = $("#siError");
+  const submitBtn = $("#btnSubmitSignIn");
+  const email = $("#siEmail").value.trim();
+  const password = $("#siPassword").value;
+
+  if(!email || !password){
+    errBox.textContent = "กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน";
+    errBox.hidden = false;
+    return;
+  }
+
+  errBox.hidden = true;
+  submitBtn.disabled = true;
+  submitBtn.querySelector(".btn-text").hidden = true;
+  submitBtn.querySelector(".btn-spinner").hidden = false;
+
+  try {
+    await loginUser({ email, password });
+  } catch (err) {
+    console.error("Login error:", err);
+    let msg = "เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบอีเมลหรือรหัสผ่าน";
+    if(err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential"){
+      msg = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+    } else if(err.code === "auth/invalid-email"){
+      msg = "รูปแบบอีเมลไม่ถูกต้อง";
+    } else if(err.code === "auth/too-many-requests"){
+      msg = "พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่";
     }
-    if($("#pinError")) $("#pinError").textContent = "รหัส PIN ไม่ถูกต้อง ลองอีกครั้ง";
-    setTimeout(() => {
-      pinBuffer = "";
-      if(pinActiveOptions) updatePinDots(pinActiveOptions.maxLen || 4);
-    }, 450);
+    errBox.textContent = msg;
+    errBox.hidden = false;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.querySelector(".btn-text").hidden = false;
+    submitBtn.querySelector(".btn-spinner").hidden = true;
+  }
+});
+
+/* Sign Up Submit */
+$("#fSignUp")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errBox = $("#suError");
+  const submitBtn = $("#btnSubmitSignUp");
+  const displayName = $("#suName").value.trim();
+  const email = $("#suEmail").value.trim();
+  const password = $("#suPassword").value;
+  const confirmPassword = $("#suConfirmPassword").value;
+
+  if(!displayName || !email || !password || !confirmPassword){
+    errBox.textContent = "กรุณากรอกข้อมูลให้ครบทุกช่อง";
+    errBox.hidden = false;
+    return;
+  }
+
+  if(password.length < 6){
+    errBox.textContent = "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร";
+    errBox.hidden = false;
+    return;
+  }
+
+  if(password !== confirmPassword){
+    errBox.textContent = "รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน";
+    errBox.hidden = false;
+    return;
+  }
+
+  errBox.hidden = true;
+  submitBtn.disabled = true;
+  submitBtn.querySelector(".btn-text").hidden = true;
+  submitBtn.querySelector(".btn-spinner").hidden = false;
+
+  try {
+    await registerUser({ email, password, displayName });
+    toast("ลงทะเบียนเรียบร้อยแล้ว ✨");
+  } catch (err) {
+    console.error("Register error:", err);
+    let msg = "ลงทะเบียนไม่สำเร็จ: " + (err.message || "");
+    if(err.code === "auth/email-already-in-use"){
+      msg = "อีเมลนี้มีผู้ใช้งานในระบบแล้ว กรุณาไปที่แท็บ 'เข้าสู่ระบบ'";
+    } else if(err.code === "auth/invalid-email"){
+      msg = "รูปแบบอีเมลไม่ถูกต้อง";
+    } else if(err.code === "auth/weak-password"){
+      msg = "รหัสผ่านง่ายเกินไป กรุณาใช้รหัสผ่านอย่างน้อย 6 ตัวอักษร";
+    }
+    errBox.textContent = msg;
+    errBox.hidden = false;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.querySelector(".btn-text").hidden = false;
+    submitBtn.querySelector(".btn-spinner").hidden = true;
+  }
+});
+
+/* Forgot Password */
+$("#btnForgotPwd")?.addEventListener("click", async () => {
+  const email = $("#siEmail").value.trim() || prompt("กรุณาระบุอีเมลที่ต้องการรับลิงก์รีเซ็ตรหัสผ่าน:");
+  if(!email) return;
+  try {
+    await resetPassword(email);
+    alert(`ส่งลิงก์สำหรับรีเซ็ตรหัสผ่านไปยัง ${email} เรียบร้อยแล้ว`);
+  } catch (err) {
+    alert("ไม่สามารถส่งลิงก์รีเซ็ตรหัสผ่านได้: " + (err.message || ""));
+  }
+});
+
+/* User Quick Action Menu */
+function openUserMenu(){
+  const { user, profile } = getAuthState();
+  if(!user){
+    if(!$("#dAuth").open) $("#dAuth").showModal();
+    return;
+  }
+  const isOwnerUser = (profile?.role === "owner");
+  $("#umAvatar").textContent = isOwnerUser ? "👑" : "👤";
+  $("#umName").textContent = profile?.displayName || user.displayName || user.email.split("@")[0];
+  $("#umEmail").textContent = user.email;
+  $("#umRoleBadge").textContent = isOwnerUser ? "👑 เจ้าของร้าน" : "👤 พนักงาน";
+  $("#umRoleBadge").className = isOwnerUser ? "badge-owner" : "badge-staff";
+
+  const manageBtn = $("#umManageBtn");
+  if(manageBtn) manageBtn.hidden = !isOwnerUser;
+  const previewRow = $("#umPreviewRow");
+  if(previewRow) previewRow.hidden = !isOwnerUser;
+  const previewToggle = $("#umPreviewToggle");
+  if(previewToggle) previewToggle.checked = staffPreview;
+
+  $("#dUserMenu").showModal();
+}
+
+$("#userBadgeBtn")?.addEventListener("click", openUserMenu);
+$("#closeUserMenuBtn")?.addEventListener("click", () => $("#dUserMenu").close());
+
+$("#umManageBtn")?.addEventListener("click", () => {
+  $("#dUserMenu").close();
+  openUsersModal();
+});
+
+$("#umPreviewToggle")?.addEventListener("change", (e) => {
+  staffPreview = e.target.checked;
+  applyRole();
+  render();
+  toast(staffPreview ? "สลับเป็นมุมมองพนักงาน (ซ่อนต้นทุน-กำไร) 👤" : "กลับสู่มุมมองเจ้าของร้าน 👑");
+});
+
+async function handleLogout(){
+  if(!confirm("คุณต้องการออกจากระบบ ใช่หรือไม่?")) return;
+  try {
+    if($("#dUserMenu")?.open) $("#dUserMenu").close();
+    if($("#dPending")?.open) $("#dPending").close();
+    await logoutUser();
+    toast("ออกจากระบบเรียบร้อยแล้ว");
+  } catch (err) {
+    toast("เกิดข้อผิดพลาดในการออกจากระบบ");
   }
 }
 
-document.querySelectorAll(".pin-pad .pad-btn[data-key]").forEach(b => {
-  b.addEventListener("click", () => onPinDigit(b.dataset.key));
-});
-$("#pinBack")?.addEventListener("click", onPinBackspace);
-$("#pinClear")?.addEventListener("click", onPinClear);
-$("#pinCancelBtn")?.addEventListener("click", () => {
-  if(pinActiveOptions && pinActiveOptions.cancellable){
-    $("#dPin").close();
-    pinActiveOptions = null;
-    pinBuffer = "";
+$("#umLogoutBtn")?.addEventListener("click", handleLogout);
+$("#moreLogoutBtn")?.addEventListener("click", handleLogout);
+$("#pendingLogoutBtn")?.addEventListener("click", handleLogout);
+
+/* ===================== Owner User Management Panel ===================== */
+let usersUnsub = null;
+
+function openUsersModal(){
+  if(!realOwner){
+    toast("เฉพาะเจ้าของร้านเท่านั้นที่สามารถจัดการผู้ใช้งานได้");
+    return;
   }
-});
-window.addEventListener("keydown", e => {
-  const pinModal = $("#dPin");
-  if(!pinModal || !pinModal.open) return;
-  if(e.key >= "0" && e.key <= "9"){
-    e.preventDefault();
-    onPinDigit(e.key);
-  } else if(e.key === "Backspace"){
-    e.preventDefault();
-    onPinBackspace();
-  } else if(e.key === "Escape"){
-    if(pinActiveOptions && pinActiveOptions.cancellable){
-      pinModal.close();
-      pinActiveOptions = null;
-      pinBuffer = "";
-    }
+  $("#dUsers").showModal();
+  if(usersUnsub) usersUnsub();
+  usersUnsub = subscribeAllUsers((userList) => {
+    renderUsersPanel(userList);
+  });
+}
+
+$("#userMgmtBtn")?.addEventListener("click", openUsersModal);
+$("#closeUsersModalBtn")?.addEventListener("click", () => {
+  $("#dUsers").close();
+  if(usersUnsub){
+    usersUnsub();
+    usersUnsub = null;
   }
 });
 
-function handleSwitchUser(){
-  if(currentRole === "staff"){
-    openPinPad({
-      title: "ปลดล็อกสิทธิ์เจ้าของร้าน",
-      desc: "กรุณาใส่รหัส PIN เจ้าของร้านเพื่อดูต้นทุนและกำไร",
-      avatar: "👑",
-      target: "owner",
-      hint: `รหัสเริ่มต้นเจ้าของร้านคือ <b>${shop.ownerPin || "8888"}</b>`,
-      onDone: () => {
-        currentRole = "owner";
-        localStorage.setItem("khlang_lek_role", "owner");
-        applyRole();
-        render();
-        toast("ปลดล็อกสิทธิ์เจ้าของร้านเรียบร้อย 👑");
+function renderUsersPanel(list){
+  const pending = list.filter(u => u.status === "pending");
+  const approved = list.filter(u => u.status === "approved" || u.status === "disabled");
+  const currentUid = getAuthState().user?.uid;
+
+  $("#pendingUsersCount").textContent = pending.length;
+  $("#approvedUsersCount").textContent = approved.length;
+
+  const pList = $("#pendingUsersList");
+  if(pending.length === 0){
+    pList.innerHTML = `<div class="empty" style="padding:14px;font-size:.85rem">ไม่มีคำขอรออนุมัติในขณะนี้</div>`;
+  } else {
+    pList.innerHTML = pending.map(u => `
+      <div class="user-item-card">
+        <div class="user-item-top">
+          <div class="user-item-info">
+            <b>${esc(u.displayName || "พนักงานใหม่")}</b>
+            <span>${esc(u.email)} · ${dstr(u.createdAt || Date.now())}</span>
+          </div>
+          <span class="badge-waiting"><span class="pulse-dot"></span> รออนุมัติ</span>
+        </div>
+        <div class="user-item-actions">
+          <button type="button" class="btn btn-sm primary btn-approve-staff" data-uid="${esc(u.uid)}">✓ อนุมัติเป็นลูกน้อง</button>
+          <button type="button" class="btn btn-sm accent btn-approve-owner" data-uid="${esc(u.uid)}">👑 อนุมัติเป็นเจ้าของ</button>
+          <button type="button" class="btn btn-sm ghost btn-del-user" data-uid="${esc(u.uid)}" style="color:var(--low)">✕ ปฏิเสธ</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  const aList = $("#approvedUsersList");
+  if(approved.length === 0){
+    aList.innerHTML = `<div class="empty" style="padding:14px;font-size:.85rem">ไม่มีผู้ใช้งาน</div>`;
+  } else {
+    aList.innerHTML = approved.map(u => {
+      const isMe = (u.uid === currentUid);
+      const isOwner = (u.role === "owner");
+      const isDisabled = (u.status === "disabled");
+      return `
+        <div class="user-item-card">
+          <div class="user-item-top">
+            <div class="user-item-info">
+              <b>${esc(u.displayName || u.email.split("@")[0])} ${isMe ? `<span class="badge-self">(คุณ)</span>` : ""}</b>
+              <span>${esc(u.email)}${isDisabled ? ` · <span style="color:var(--low)">ถูกระงับสิทธิ์</span>` : ""}</span>
+            </div>
+            <span class="${isOwner ? "badge-owner" : "badge-staff"}">${isOwner ? "👑 เจ้าของร้าน" : "👤 พนักงาน"}</span>
+          </div>
+          ${!isMe ? `
+            <div class="user-item-actions">
+              ${isOwner 
+                ? `<button type="button" class="btn btn-sm btn-set-role" data-uid="${esc(u.uid)}" data-role="staff">สลับเป็นลูกน้อง</button>`
+                : `<button type="button" class="btn btn-sm accent btn-set-role" data-uid="${esc(u.uid)}" data-role="owner">👑 สลับเป็นเจ้าของ</button>`
+              }
+              <button type="button" class="btn btn-sm ghost btn-del-user" data-uid="${esc(u.uid)}" style="color:var(--low)">ลบผู้ใช้</button>
+            </div>
+          ` : ""}
+        </div>
+      `;
+    }).join("");
+  }
+
+  pList.querySelectorAll(".btn-approve-staff").forEach(b => {
+    b.addEventListener("click", async () => {
+      const uid = b.dataset.uid;
+      try {
+        await approveUser(uid, "staff");
+        toast("อนุมัติเป็นพนักงานเรียบร้อยแล้ว ✓");
+      } catch (e) {
+        toast("อนุมัติไม่สำเร็จ: " + e.message);
       }
     });
-  } else {
-    if(confirm("ต้องการสลับเป็นโหมด 'ลูกน้อง' (ซ่อนต้นทุนและกำไร) ใช่หรือไม่?")){
-      currentRole = "staff";
-      localStorage.setItem("khlang_lek_role", "staff");
-      applyRole();
-      render();
-      toast("สลับเป็นโหมดลูกน้องแล้ว 👤");
-    }
-  }
-}
+  });
 
-$("#roleBtn")?.addEventListener("click", handleSwitchUser);
-$("#btnSwitchPin")?.addEventListener("click", handleSwitchUser);
-$("#switchUserRow")?.addEventListener("click", e => {
-  if(e.target.id !== "btnSwitchPin") handleSwitchUser();
-});
+  pList.querySelectorAll(".btn-approve-owner").forEach(b => {
+    b.addEventListener("click", async () => {
+      const uid = b.dataset.uid;
+      try {
+        await approveUser(uid, "owner");
+        toast("อนุมัติเป็นเจ้าของร้านเรียบร้อยแล้ว 👑");
+      } catch (e) {
+        toast("อนุมัติไม่สำเร็จ: " + e.message);
+      }
+    });
+  });
+
+  const allDelButtons = document.querySelectorAll("#dUsers .btn-del-user");
+  allDelButtons.forEach(b => {
+    b.addEventListener("click", async () => {
+      const uid = b.dataset.uid;
+      if(!confirm("ต้องการลบหรือปฏิเสธผู้ใช้งานรายนี้ ใช่หรือไม่?")) return;
+      try {
+        await deleteUserRecord(uid);
+        toast("ลบรายการผู้ใช้เรียบร้อยแล้ว");
+      } catch (e) {
+        toast("ลบไม่สำเร็จ: " + e.message);
+      }
+    });
+  });
+
+  aList.querySelectorAll(".btn-set-role").forEach(b => {
+    b.addEventListener("click", async () => {
+      const uid = b.dataset.uid;
+      const newRole = b.dataset.role;
+      const label = newRole === "owner" ? "เจ้าของร้าน" : "พนักงาน (ลูกน้อง)";
+      if(!confirm(`ต้องการเปลี่ยนสิทธิ์เป็น '${label}' ใช่หรือไม่?`)) return;
+      try {
+        await updateUserRole(uid, newRole);
+        toast(`เปลี่ยนสิทธิ์เป็น ${label} แล้ว`);
+      } catch (e) {
+        toast("เปลี่ยนสิทธิ์ไม่สำเร็จ: " + e.message);
+      }
+    });
+  });
+}
 const names={}; let nameReq=null;
 function nameOf(id){
-  if(!id||!userCap) return ""; if(id===me) return "คุณ";
+  if(!id) return "";
+  if(id===me) return "คุณ";
   if(names[id]!==undefined) return names[id];
-  names[id]=""; clearTimeout(nameReq);
-  nameReq=setTimeout(async()=>{ try{ const ids=Object.keys(names).filter(k=>names[k]===""); const ps=await userCap.profiles(ids);
-    ids.forEach(k=>names[k]=(ps&&ps[k]&&ps[k].name)||"ผู้ใช้อื่น"); renderLog(); renderDocs(); }catch(e){} },50);
-  return "";
+  if(userCap){
+    names[id]=""; clearTimeout(nameReq);
+    nameReq=setTimeout(async()=>{ try{ const ids=Object.keys(names).filter(k=>names[k]===""); const ps=await userCap.profiles(ids);
+      ids.forEach(k=>names[k]=(ps&&ps[k]&&ps[k].name)||"ผู้ใช้อื่น"); renderLog(); renderDocs(); }catch(e){} },50);
+  }
+  return id;
 }
 const byTxt=o=>{ const n=nameOf(o&&o.by); return n?` · โดย ${n}`:""; };
 const AUDIT=/^(docs|buys|cash|moves|closes|counts|prices|orders|customers)\//;
@@ -2059,29 +2340,14 @@ attachCustPicker($("#qsCust"),c=>{ $("#qsCust").value=c.name; toast(`ลูก�
 /* ---------- shop info ---------- */
 const fs=$("#fShop");
 function openShopModal(){
-  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote","ownerPin","staffPin"]){
+  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote"]){
     if(fs[k]) fs[k].value = shop[k] || "";
   }
-  if(fs.ownerPin) fs.ownerPin.value = shop.ownerPin || "8888";
-  if(fs.staffPin) fs.staffPin.value = shop.staffPin || "1111";
   $("#dShop").showModal();
 }
 $("#shopBtn").addEventListener("click",()=>{
-  if(isStaff()){
-    openPinPad({
-      title: "ตั้งค่าร้านค้า (เจ้าของร้าน)",
-      desc: "กรุณาใส่รหัส PIN เจ้าของร้านเพื่อเข้าถึงการตั้งค่า",
-      avatar: "🔐",
-      target: "owner",
-      hint: `รหัสเริ่มต้นเจ้าของร้านคือ <b>${shop.ownerPin || "8888"}</b>`,
-      onDone: () => {
-        currentRole = "owner";
-        localStorage.setItem("khlang_lek_role", "owner");
-        applyRole();
-        render();
-        openShopModal();
-      }
-    });
+  if(!realOwner){
+    toast("เฉพาะเจ้าของร้านเท่านั้นที่สามารถเข้าถึงการตั้งค่าได้ 👑");
     return;
   }
   openShopModal();
@@ -2090,7 +2356,7 @@ fs.addEventListener("submit",async e=>{
   if(e.submitter&&e.submitter.value!=="save") return;
   e.preventDefault(); if(!fs.reportValidity()) return;
   const v={};
-  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote","ownerPin","staffPin"]){
+  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote"]){
     if(fs[k]) v[k]=fs[k].value.trim();
   }
   if(!v.ownerPin) v.ownerPin = "8888";

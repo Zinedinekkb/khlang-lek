@@ -66,9 +66,9 @@
       <div><h1 id="pageTitle">สต็อก</h1><p class="sub" id="shopTitle">คลังเหล็ก</p></div>
       <div class="head-right">
         <div class="mode" id="mode">กำลังเชื่อมต่อ…</div>
-        <button type="button" class="role-btn" id="roleBtn" title="สลับสิทธิ์ผู้ใช้ / ใส่รหัส PIN">
-          <span id="roleIcon">👑</span>
-          <span id="roleText">เจ้าของ</span>
+        <button type="button" class="user-badge-btn" id="userBadgeBtn" title="ข้อมูลผู้ใช้และระดับสิทธิ์">
+          <span class="user-role-icon" id="userRoleIcon">👑</span>
+          <span class="user-name-text" id="userNameText">ผู้ใช้</span>
         </button>
       </div>
     </div>
@@ -119,16 +119,17 @@
         <button class="mi" id="scrapSellBtn"><span>ขายเศษให้โรงหลอม<small>ตัดสต็อกเหล็กเก่า บันทึกรายรับ</small></span><span aria-hidden="true">›</span></button>
         <button class="mi owner" id="importBtn"><span>นำเข้าสินค้าจาก Excel<small>ลงสต็อกหลายรายการทีเดียว</small></span><span aria-hidden="true">›</span></button>
         <button class="mi owner" id="xlsBtn" hidden><span>ส่งออก Excel<small>สต็อก ซื้อเข้า ขาย รายรับ-รายจ่าย</small></span><span aria-hidden="true">›</span></button>
-        <button class="mi owner" id="shopBtn"><span>ข้อมูลร้านและการตั้งค่า<small>ชื่อ ที่อยู่ เบอร์ พร้อมเพย์ รหัสผ่าน PIN</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi owner" id="userMgmtBtn"><span>👥 จัดการผู้ใช้งานและสิทธิ์พนักงาน<small>อนุมัติพนักงานใหม่ ตั้งค่าสิทธิ์ เจ้าของ/ลูกน้อง</small></span><span aria-hidden="true">›</span></button>
+        <button class="mi owner" id="shopBtn"><span>ข้อมูลร้านและการตั้งค่า<small>ชื่อ ที่อยู่ เบอร์ พร้อมเพย์ บัญชีธนาคาร</small></span><span aria-hidden="true">›</span></button>
         <button class="mi owner" id="backupJsonBtn"><span>สำรองข้อมูลทั้งหมด (JSON)<small>ดาวน์โหลดข้อมูลทุกอย่างเก็บไว้เป็นไฟล์</small></span><span aria-hidden="true">›</span></button>
         <button class="mi owner" id="restoreJsonBtn"><span>กู้คืนข้อมูลจากไฟล์ JSON<small>นำเข้าข้อมูลสำรองกลับเข้าระบบ</small></span><span aria-hidden="true">›</span></button>
         <button class="mi owner" id="migrateLocalBtn" hidden><span>ย้ายข้อมูลจากโหมดทดลองขึ้นระบบออนไลน์<small>นำข้อมูลที่เคยบันทึกในเครื่องนี้ขึ้นฐานข้อมูล</small></span><span aria-hidden="true">›</span></button>
         <input type="file" id="restoreFile" accept=".json" hidden>
       </div>
       <div class="menu" style="margin-top:10px">
-        <div class="mi" id="switchUserRow" style="cursor:pointer">
-          <span>สิทธิ์การใช้งาน<small id="roleInfo">—</small></span>
-          <button type="button" class="btn ghost btn-sm" id="btnSwitchPin" style="padding:4px 10px;font-size:.8rem">สลับผู้ใช้ / ล็อก</button>
+        <div class="mi" id="currentUserRow">
+          <span>ผู้ใช้งาน: <b id="moreUserEmail">—</b><small id="roleInfo">—</small></span>
+          <button type="button" class="btn ghost btn-sm" id="moreLogoutBtn" style="padding:4px 10px;font-size:.8rem;color:var(--low);border-color:var(--low)">ออกจากระบบ</button>
         </div>
       </div>
       <h4 class="sec">ประวัติเข้า-ออกสต็อก</h4>
@@ -627,11 +628,6 @@
     <label class="full">ชื่อเจ้าของบัญชี<input name="bankHolder" maxlength="80" placeholder="เช่น บจก. คลังเหล็ก"></label>
     <label class="full">ข้อความ/เงื่อนไขท้ายบิล<input name="billNote" maxlength="200" placeholder="เช่น สินค้าซื้อแล้วไม่รับเปลี่ยนหรือคืน · โปรดตรวจนับสินค้าก่อนรับมอบ"></label>
 
-    <div class="full" style="margin-top:6px;border-top:1px solid var(--line);padding-top:10px">
-      <b style="font-size:.9rem">ความปลอดภัย & รหัสผ่าน PIN เข้าระบบ</b>
-    </div>
-    <label>รหัสผ่านเจ้าของร้าน (4-6 หลัก)<input name="ownerPin" type="password" maxlength="6" inputmode="numeric" placeholder="ค่าเริ่มต้น 8888" autocomplete="off"></label>
-    <label>รหัสผ่านลูกน้อง (4-6 หลัก)<input name="staffPin" type="password" maxlength="6" inputmode="numeric" placeholder="ค่าเริ่มต้น 1111" autocomplete="off"></label>
   </div>
   <div class="row" style="margin-top:16px">
     <button class="btn primary grow" value="save">บันทึก</button>
@@ -639,41 +635,193 @@
   </div>
 </form></dialog>
 
-<!-- PIN Auth Keypad Modal -->
-<dialog id="dPin" class="pin-modal">
-  <div class="pin-sheet">
-    <div class="pin-header">
-      <div class="pin-avatar" id="pinAvatar">🔐</div>
-      <h2 id="pinTitle">ใส่รหัสผ่านเพื่อเข้าใช้งาน</h2>
-      <p class="pin-desc" id="pinDesc">กรุณากรอกรหัส PIN (เจ้าของร้าน หรือ ลูกน้อง)</p>
+<!-- Email Authentication Modal -->
+<dialog id="dAuth" class="auth-modal">
+  <div class="auth-sheet">
+    <div class="stripe" aria-hidden="true"></div>
+    <div class="auth-header">
+      <div class="auth-logo">🏗️</div>
+      <h2>คลังเหล็ก</h2>
+      <p class="auth-subtitle">ระบบบริหารจัดการสต็อกสินค้าและหน้าร้าน</p>
     </div>
+
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab on" id="tabSignInBtn" role="tab" aria-selected="true">เข้าสู่ระบบ</button>
+      <button type="button" class="auth-tab" id="tabSignUpBtn" role="tab" aria-selected="false">สมัครพนักงานใหม่</button>
+    </div>
+
+    <!-- Sign In Form -->
+    <form id="fSignIn" class="auth-form" novalidate>
+      <div class="auth-field">
+        <label for="siEmail">อีเมล (Email)</label>
+        <input type="email" id="siEmail" name="email" required autocomplete="username" inputmode="email" placeholder="example@gmail.com">
+      </div>
+      <div class="auth-field">
+        <div class="auth-field-row">
+          <label for="siPassword">รหัสผ่าน (Password)</label>
+          <button type="button" class="auth-link-btn" id="btnForgotPwd" tabindex="-1">ลืมรหัสผ่าน?</button>
+        </div>
+        <div class="pwd-input-wrap">
+          <input type="password" id="siPassword" name="password" required autocomplete="current-password" placeholder="••••••••">
+          <button type="button" class="pwd-toggle-btn" aria-label="แสดงรหัสผ่าน" tabindex="-1" data-target="siPassword">
+            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="eye-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="auth-alert" id="siError" role="alert" hidden></div>
+
+      <button type="submit" class="btn primary auth-submit" id="btnSubmitSignIn">
+        <span class="btn-text">เข้าสู่ระบบ</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </form>
+
+    <!-- Sign Up / Register Form -->
+    <form id="fSignUp" class="auth-form" novalidate hidden>
+      <div class="auth-field">
+        <label for="suName">ชื่อ-นามสกุล หรือชื่อเล่น</label>
+        <input type="text" id="suName" name="displayName" required autocomplete="name" placeholder="เช่น สมชาย (ช่างหน้าร้าน)">
+      </div>
+      <div class="auth-field">
+        <label for="suEmail">อีเมล (สำหรับเข้าใช้งาน)</label>
+        <input type="email" id="suEmail" name="email" required autocomplete="username" inputmode="email" placeholder="staff@example.com">
+      </div>
+      <div class="auth-field">
+        <label for="suPassword">ตั้งรหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</label>
+        <div class="pwd-input-wrap">
+          <input type="password" id="suPassword" name="password" minlength="6" required autocomplete="new-password" placeholder="••••••••">
+          <button type="button" class="pwd-toggle-btn" aria-label="แสดงรหัสผ่าน" tabindex="-1" data-target="suPassword">
+            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="eye-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="auth-field">
+        <label for="suConfirmPassword">ยืนยันรหัสผ่านอีกครั้ง</label>
+        <div class="pwd-input-wrap">
+          <input type="password" id="suConfirmPassword" name="confirmPassword" minlength="6" required autocomplete="new-password" placeholder="••••••••">
+          <button type="button" class="pwd-toggle-btn" aria-label="แสดงรหัสผ่าน" tabindex="-1" data-target="suConfirmPassword">
+            <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="eye-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="auth-notice">
+        <div class="notice-icon">⏳</div>
+        <div class="notice-text">เมื่อลงทะเบียนแล้ว บัญชีจะอยู่ในสถานะ <b>"รอการอนุมัติ"</b> โดยเจ้าของร้านจะต้องกดยืนยันสิทธิ์ก่อนจึงจะสามารถเข้าดูสต็อกสินค้าได้</div>
+      </div>
+
+      <div class="auth-alert" id="suError" role="alert" hidden></div>
+
+      <button type="submit" class="btn primary auth-submit" id="btnSubmitSignUp">
+        <span class="btn-text">ลงทะเบียนพนักงาน</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </form>
+  </div>
+</dialog>
+
+<!-- Pending Approval Modal -->
+<dialog id="dPending" class="pending-modal">
+  <div class="pending-sheet">
+    <div class="pending-icon-wrap">
+      <div class="pulse-ring"></div>
+      <span class="pending-icon">⏳</span>
+    </div>
+    <h2>รอการอนุมัติจากเจ้าของร้าน</h2>
+    <p class="pending-desc">ระบบได้สร้างบัญชีของคุณเรียบร้อยแล้ว กรุณาแจ้งเจ้าของร้านเพื่ออนุมัติสิทธิ์การเข้าใช้งาน</p>
     
-    <div class="pin-dots" id="pinDots">
-      <span class="dot"></span>
-      <span class="dot"></span>
-      <span class="dot"></span>
-      <span class="dot"></span>
-    </div>
-    <div class="pin-error" id="pinError"></div>
-
-    <div class="pin-pad">
-      <button type="button" class="pad-btn" data-key="1">1</button>
-      <button type="button" class="pad-btn" data-key="2">2</button>
-      <button type="button" class="pad-btn" data-key="3">3</button>
-      <button type="button" class="pad-btn" data-key="4">4</button>
-      <button type="button" class="pad-btn" data-key="5">5</button>
-      <button type="button" class="pad-btn" data-key="6">6</button>
-      <button type="button" class="pad-btn" data-key="7">7</button>
-      <button type="button" class="pad-btn" data-key="8">8</button>
-      <button type="button" class="pad-btn" data-key="9">9</button>
-      <button type="button" class="pad-btn pad-action" id="pinClear">ล้าง</button>
-      <button type="button" class="pad-btn" data-key="0">0</button>
-      <button type="button" class="pad-btn pad-action" id="pinBack">⌫</button>
+    <div class="pending-card">
+      <div class="pending-card-row">
+        <span>ชื่อผู้ใช้:</span>
+        <b id="pendingCardName">—</b>
+      </div>
+      <div class="pending-card-row">
+        <span>อีเมล:</span>
+        <span id="pendingCardEmail">—</span>
+      </div>
+      <div class="pending-card-row">
+        <span>สถานะ:</span>
+        <span class="badge-waiting"><span class="pulse-dot"></span> กำลังรอเจ้าของร้านอนุมัติ</span>
+      </div>
     </div>
 
-    <div class="pin-footer">
-      <button type="button" class="btn ghost btn-sm" id="pinCancelBtn" style="display:none">ยกเลิก</button>
-      <div class="pin-hint" id="pinHint">รหัสเริ่มต้น: เจ้าของร้าน <b>8888</b> | ลูกน้อง <b>1111</b></div>
+    <div class="pending-live-hint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin-svg"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      <span>ระบบจะปลดล็อกและพาเข้าใช้งานทันทีเมื่อเจ้าของร้านกดอนุมัติ (ไม่ต้องรีเฟรชหน้าจอ)</span>
+    </div>
+
+    <div class="pending-actions">
+      <button type="button" class="btn ghost grow" id="pendingLogoutBtn" style="width:100%">ออกจากระบบ / สลับบัญชี</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Owner User Management Modal -->
+<dialog id="dUsers" class="users-modal">
+  <div class="sheet">
+    <div class="users-head">
+      <div>
+        <h2>👥 จัดการผู้ใช้งานและสิทธิ์</h2>
+        <p class="sub">อนุมัติพนักงานใหม่และจัดการระดับสิทธิ์ในระบบ</p>
+      </div>
+      <button type="button" class="btn ghost btn-sm" id="closeUsersModalBtn">✕ ปิด</button>
+    </div>
+
+    <div class="users-section">
+      <div class="users-sec-title">
+        <span>คำขอรอการอนุมัติ</span>
+        <span class="count-pill pending-pill" id="pendingUsersCount">0</span>
+      </div>
+      <div class="users-list" id="pendingUsersList">
+        <!-- Loaded dynamically -->
+      </div>
+    </div>
+
+    <div class="users-section" style="margin-top:14px">
+      <div class="users-sec-title">
+        <span>ผู้ใช้งานที่ได้รับอนุมัติแล้ว</span>
+        <span class="count-pill approved-pill" id="approvedUsersCount">0</span>
+      </div>
+      <div class="users-list" id="approvedUsersList">
+        <!-- Loaded dynamically -->
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<!-- User Profile / Quick Action Sheet Modal -->
+<dialog id="dUserMenu" class="user-menu-modal">
+  <div class="sheet">
+    <div class="user-menu-profile">
+      <div class="user-menu-avatar" id="umAvatar">👑</div>
+      <div>
+        <h3 id="umName">—</h3>
+        <p class="sub" id="umEmail">—</p>
+        <span class="user-role-badge" id="umRoleBadge">เจ้าของร้าน</span>
+      </div>
+    </div>
+
+    <div class="menu" style="margin-top:14px">
+      <button class="mi owner" id="umManageBtn">
+        <span>👥 จัดการผู้ใช้งานและสิทธิ์<small>อนุมัติพนักงานใหม่ / ปรับสิทธิ์</small></span>
+        <span aria-hidden="true">›</span>
+      </button>
+      <div class="mi owner" id="umPreviewRow" style="justify-content:space-between">
+        <span>ดูแบบลูกน้อง (ซ่อนต้นทุน)<small>ทดสอบมุมมองหน้าจอของพนักงาน</small></span>
+        <label class="switch"><input type="checkbox" id="umPreviewToggle"><span class="slider"></span></label>
+      </div>
+      <button class="mi" id="umLogoutBtn" style="color:var(--low)">
+        <span>🚪 ออกจากระบบ<small>ลงชื่อออกจากเครื่องนี้</small></span>
+        <span aria-hidden="true">›</span>
+      </button>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <button class="btn grow" id="closeUserMenuBtn">ปิด</button>
     </div>
   </div>
 </dialog>
