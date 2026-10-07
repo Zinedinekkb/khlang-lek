@@ -14,7 +14,7 @@ const money = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const dstr = t => new Date(t).toLocaleString("th-TH",{dateStyle:"short",timeStyle:"short"});
 const dlong = t => new Date(t).toLocaleDateString("th-TH",{year:"numeric",month:"long",day:"numeric"});
-const DEFAULT_SHOP = {name:"", phone:"", tax:"", addr:"", promptpay:""};
+const DEFAULT_SHOP = {name:"", phone:"", tax:"", addr:"", promptpay:"", bankName:"", bankAcc:"", bankHolder:"", billNote:"สินค้าซื้อแล้วไม่รับเปลี่ยนหรือคืน · โปรดตรวจนับสินค้าก่อนรับมอบ", ownerPin:"8888", staffPin:"1111"};
 
 let items=[], moves=[], buys=[], docs=[], cash=[], shop={...DEFAULT_SHOP};
 let cat="ทั้งหมด", docFilter="ทั้งหมด", buyFilter="ทั้งหมด", tab="stock", current=null, store, downloads=null, assets=null, sample=null, sampleImg=false;
@@ -52,7 +52,7 @@ async function init(){
   try{ if(window.claude&&claude.use) db=await claude.use("db"); }catch(e){}
   store = db ? dbStore(db) : localStore(); wrapAudit();
   checkLocalDemoMigration();
-  try{ if(window.claude&&claude.use){ userCap=await claude.use("user"); if(userCap){ realOwner=!!userCap.isOwner(); try{ me=await userCap.id(); }catch(e){} } } }catch(e){}
+  try{ if(window.claude&&claude.use){ userCap=await claude.use("user"); if(userCap){ try{ me=await userCap.id(); }catch(e){} } } }catch(e){}
   applyRole();
   $("#mode").innerHTML = db ? "<b>●</b> ออนไลน์" : "โหมดทดลอง"; $("#mode").title = db ? "ฐานข้อมูลออนไลน์ ซิงก์ทุกเครื่อง" : "บันทึกเฉพาะเครื่องนี้";
   store.sub("items",{},v=>{items=v;render();renderProfit();});
@@ -1121,29 +1121,100 @@ function bahtText(n){
   let b=Math.floor(n), st=Math.round((n-b)*100); if(st===100){b++;st=0;}
   return (b?rd(b)+"บาท":(st?"":"ศูนย์บาท"))+(st?rd(st)+"สตางค์":"ถ้วน");
 }
-function paperHTML(d){
-  return `<div class="paper">
-  <div class="ph"><div class="shop"><b>${esc(shop.name)}</b>${shop.addr?esc(shop.addr)+"<br>":""}${shop.phone&&d.showPhone!==false?"โทร "+esc(shop.phone):""}${shop.tax?"<br>เลขผู้เสียภาษี "+esc(shop.tax):""}</div>
-  <div class="dt"><h2>${d.type==="credit"?"ใบส่งของ / ใบแจ้งหนี้":DOCNAME[d.type]}</h2><div>เลขที่ ${esc(d.no)}</div><div>วันที่ ${dlong(d.date||d.at)}</div>${d.type==="credit"?`<div>ครบกำหนดชำระ ${dlong(d.due||d.date)}</div>`:""}</div></div>
-  <div class="cust"><b>ลูกค้า:</b> ${esc(d.customer)}${d.phone&&d.showPhone!==false?" · โทร "+esc(d.phone):""}${d.addr?"<br>"+esc(d.addr):""}
-  ${d.ful==="ship"?`<br><b>จัดส่งที่:</b> ${esc(d.shipAddr||"-")}${d.shipPhone&&d.showPhone!==false?" · ผู้รับ โทร "+esc(d.shipPhone):""}${d.shipDate?" · วันที่ส่ง "+dlong(d.shipDate):""}`:d.ful==="pickup"?`<br><b>การรับสินค้า:</b> ลูกค้ามารับเอง`:""}</div>
+function paperHTML(d, format = "a4"){
+  if(format === "slip"){
+    return `<div class="paper paper-slip">
+  <div class="ph">
+    <div class="shop">
+      <b>${esc(shop.name || "คลังเหล็ก")}</b>
+      ${shop.addr ? esc(shop.addr) + "<br>" : ""}
+      ${shop.phone && d.showPhone !== false ? "โทร " + esc(shop.phone) : ""}
+      ${shop.tax ? "<br>เลขผู้เสียภาษี " + esc(shop.tax) : ""}
+    </div>
+    <div class="dt">
+      <h2>${d.type === "credit" ? "ใบส่งของ / ใบแจ้งหนี้" : DOCNAME[d.type]}</h2>
+      <div>เลขที่: <b>${esc(d.no)}</b></div>
+      <div>วันที่: ${dstr(d.date || d.at)}</div>
+      ${d.type === "credit" ? `<div>ครบกำหนด: ${dlong(d.due || d.date)}</div>` : ""}
+      <div>ออกโดย: ${currentRole === "owner" ? "เจ้าของร้าน" : "พนักงาน (ลูกน้อง)"}</div>
+    </div>
+  </div>
+  <div class="cust">
+    <b>ลูกค้า:</b> ${esc(d.customer)}
+    ${d.phone && d.showPhone !== false ? "<br>โทร: " + esc(d.phone) : ""}
+    ${d.addr ? "<br>" + esc(d.addr) : ""}
+    ${d.ful === "ship" ? `<br><b>จัดส่งที่:</b> ${esc(d.shipAddr || "-")}${d.shipPhone && d.showPhone !== false ? " · ผู้รับ: " + esc(d.shipPhone) : ""}` : ""}
+  </div>
+  <table>
+    <thead><tr><th style="text-align:left">รายการ</th><th class="r">จน.</th><th class="r">ราคา</th><th class="r">รวม</th></tr></thead>
+    <tbody>
+    ${d.lines.map((l, i) => `<tr>
+      <td colspan="4" class="slip-item-name">${i + 1}. ${esc(l.name)}</td>
+    </tr>
+    <tr class="slip-item-calc">
+      <td></td>
+      <td class="r">${fmt(l.qty)} ${esc(l.unit)}</td>
+      <td class="r">${money(l.price)}</td>
+      <td class="r"><b>${money(l.qty * l.price)}</b></td>
+    </tr>`).join("")}
+    </tbody>
+  </table>
+  <div class="tot">
+    <table>
+      <tr><td>รวมเป็นเงิน</td><td class="r">${money(d.sub)}</td></tr>
+      ${d.discount ? `<tr><td>ส่วนลด</td><td class="r">-${money(d.discount)}</td></tr>` : ""}
+      <tr><th style="font-size:13px">ยอดสุทธิ</th><th class="r" style="font-size:14px"><b>${money(d.total)} บาท</b></th></tr>
+    </table>
+    <div class="words">(${bahtText(d.total)})</div>
+  </div>
+  ${d.type === "receipt" && d.via ? `<div class="note">ชำระโดย: <b>${esc(d.via)}</b></div>` : ""}
+  ${d.type === "credit" ? `<div class="note" style="border:1px dashed #000;padding:4px">ชำระแล้ว ${money(sumPay(d.payments))} บาท · <b>คงค้าง ${money(docOwed(d))} บาท</b></div>` : ""}
+  ${shop.bankName && shop.bankAcc ? `
+  <div class="bank-box">
+    <div><b>โอนเข้าบัญชี:</b> ${esc(shop.bankName)}</div>
+    <div>เลขที่: <b>${esc(shop.bankAcc)}</b></div>
+    ${shop.bankHolder ? `<div>ชื่อบัญชี: ${esc(shop.bankHolder)}</div>` : ""}
+  </div>` : ""}
+  ${(d.type === "quote" || (d.type === "credit" && docOwed(d) > 0) || d.type === "receipt") && shop.promptpay ? (() => {
+    const amt = d.type === "credit" ? docOwed(d) : (+d.total || 0);
+    const u = qrDataURL(ppPayload(shop.promptpay, amt));
+    return u ? `<div class="qrbox"><img src="${u}" alt="QR"><div>สแกนจ่ายพร้อมเพย์: ${esc(shop.promptpay)}<br>ยอดชำระ <b>${money(amt)} บาท</b></div></div>` : "";
+  })() : ""}
+  ${d.note ? `<div class="note">หมายเหตุ: ${esc(d.note)}</div>` : ""}
+  <div class="slip-footer">
+    <div>${shop.billNote ? esc(shop.billNote) : "สินค้าซื้อแล้วไม่รับเปลี่ยนหรือคืน · โปรดตรวจนับสินค้าก่อนรับมอบ"}</div>
+    <div style="margin-top:4px">ขอบคุณที่ใช้บริการ 🙏</div>
+  </div>
+</div>`;
+  }
+
+  // A4 / Full paper format
+  return `<div class="paper paper-a4">
+  <div class="ph"><div class="shop"><b>${esc(shop.name || "คลังเหล็ก")}</b>${shop.addr ? esc(shop.addr) + "<br>" : ""}${shop.phone && d.showPhone !== false ? "โทร " + esc(shop.phone) : ""}${shop.tax ? "<br>เลขผู้เสียภาษี " + esc(shop.tax) : ""}</div>
+  <div class="dt"><h2>${d.type === "credit" ? "ใบส่งของ / ใบแจ้งหนี้" : DOCNAME[d.type]}</h2><div>เลขที่ ${esc(d.no)}</div><div>วันที่ ${dlong(d.date || d.at)}</div>${d.type === "credit" ? `<div>ครบกำหนดชำระ ${dlong(d.due || d.date)}</div>` : ""}<div>ออกโดย: ${currentRole === "owner" ? "เจ้าของร้าน" : "พนักงาน (ลูกน้อง)"}</div></div></div>
+  <div class="cust"><b>ลูกค้า:</b> ${esc(d.customer)}${d.phone && d.showPhone !== false ? " · โทร " + esc(d.phone) : ""}${d.addr ? "<br>" + esc(d.addr) : ""}
+  ${d.ful === "ship" ? `<br><b>จัดส่งที่:</b> ${esc(d.shipAddr || "-")}${d.shipPhone && d.showPhone !== false ? " · ผู้รับ โทร " + esc(d.shipPhone) : ""}${d.shipDate ? " · วันที่ส่ง " + dlong(d.shipDate) : ""}` : d.ful === "pickup" ? `<br><b>การรับสินค้า:</b> ลูกค้ามารับเอง` : ""}</div>
   <table><thead><tr><th class="r">#</th><th>รายการ</th><th class="r">จำนวน</th><th class="r">ราคา/หน่วย</th><th class="r">จำนวนเงิน</th></tr></thead><tbody>
-  ${d.lines.map((l,i)=>`<tr><td class="r">${i+1}</td><td>${esc(l.name)}</td><td class="r">${fmt(l.qty)} ${esc(l.unit)}</td><td class="r">${money(l.price)}</td><td class="r">${money(l.qty*l.price)}</td></tr>`).join("")}
+  ${d.lines.map((l, i) => `<tr><td class="r">${i + 1}</td><td>${esc(l.name)}</td><td class="r">${fmt(l.qty)} ${esc(l.unit)}</td><td class="r">${money(l.price)}</td><td class="r">${money(l.qty * l.price)}</td></tr>`).join("")}
   </tbody></table>
   <div class="tot"><div class="words">(${bahtText(d.total)})</div>
-  <table><tr><td>รวม</td><td class="r">${money(d.sub)}</td></tr>${d.discount?`<tr><td>ส่วนลด</td><td class="r">-${money(d.discount)}</td></tr>`:""}<tr><th>ยอดสุทธิ</th><th class="r">${money(d.total)}</th></tr></table></div>
-  ${d.note?`<div class="note">หมายเหตุ: ${esc(d.note)}</div>`:""}
-  ${d.type==="quote"?`<div class="note">ยืนราคา 7 วันนับจากวันที่ในเอกสาร</div>`:""}
-  ${d.type==="receipt"&&d.via?`<div class="note">ชำระโดย ${esc(d.via)}</div>`:""}
-  ${d.type==="credit"?`<div class="paystat">ชำระแล้ว ${money(sumPay(d.payments))} บาท · <b>คงค้าง ${money(docOwed(d))} บาท</b>${(d.payments||[]).length?"<br>"+d.payments.map(p=>`${dlong(p.date)} ${esc(p.via)} ${money(p.amount)}`).join(" · "):""}</div>`:""}
-  ${(d.type==="quote"||(d.type==="credit"&&docOwed(d)>0))&&shop.promptpay?(()=>{ const amt=d.type==="credit"?docOwed(d):(+d.total||0), u=qrDataURL(ppPayload(shop.promptpay,amt)); return u?`<div class="qrbox"><img src="${u}" alt="QR"><div>สแกนจ่ายพร้อมเพย์<br>${money(amt)} บาท</div></div>`:""; })():""}
-  <div class="sign" style="clear:both"><div>${d.type==="quote"?"ผู้เสนอราคา":d.type==="credit"?"ผู้ส่งของ":"ผู้รับเงิน"}</div><div>${d.type==="quote"?"ผู้อนุมัติสั่งซื้อ":d.type==="credit"?"ผู้รับของ":"ผู้จ่ายเงิน"}</div></div>
+  <table><tr><td>รวม</td><td class="r">${money(d.sub)}</td></tr>${d.discount ? `<tr><td>ส่วนลด</td><td class="r">-${money(d.discount)}</td></tr>` : ""}<tr><th>ยอดสุทธิ</th><th class="r">${money(d.total)}</th></tr></table></div>
+  ${shop.bankName && shop.bankAcc ? `
+  <div class="bank-box"><b>ข้อมูลการโอนเงินเข้าบัญชี:</b> ธนาคาร ${esc(shop.bankName)} · เลขที่บัญชี: <b>${esc(shop.bankAcc)}</b> ${shop.bankHolder ? `· ชื่อบัญชี: ${esc(shop.bankHolder)}` : ""}</div>` : ""}
+  ${d.note ? `<div class="note">หมายเหตุ: ${esc(d.note)}</div>` : ""}
+  ${d.type === "quote" ? `<div class="note">ยืนราคา 7 วันนับจากวันที่ในเอกสาร</div>` : ""}
+  ${d.type === "receipt" && d.via ? `<div class="note">ชำระโดย ${esc(d.via)}</div>` : ""}
+  ${d.type === "credit" ? `<div class="paystat">ชำระแล้ว ${money(sumPay(d.payments))} บาท · <b>คงค้าง ${money(docOwed(d))} บาท</b>${(d.payments || []).length ? "<br>" + d.payments.map(p => `${dlong(p.date)} ${esc(p.via)} ${money(p.amount)}`).join(" · ") : ""}</div>` : ""}
+  ${(d.type === "quote" || (d.type === "credit" && docOwed(d) > 0) || d.type === "receipt") && shop.promptpay ? (() => { const amt = d.type === "credit" ? docOwed(d) : (+d.total || 0), u = qrDataURL(ppPayload(shop.promptpay, amt)); return u ? `<div class="qrbox"><img src="${u}" alt="QR"><div>สแกนจ่ายพร้อมเพย์<br>${money(amt)} บาท</div></div>` : ""; })() : ""}
+  ${shop.billNote ? `<div class="note" style="margin-top:8px;font-size:12px;color:#555">เงื่อนไข: ${esc(shop.billNote)}</div>` : ""}
+  <div class="sign" style="clear:both"><div>${d.type === "quote" ? "ผู้เสนอราคา" : d.type === "credit" ? "ผู้ส่งของ" : "ผู้รับเงิน / พนักงาน"}</div><div>${d.type === "quote" ? "ผู้อนุมัติสั่งซื้อ" : d.type === "credit" ? "ผู้รับของ" : "ผู้จ่ายเงิน / ลูกค้า"}</div></div>
 </div>`;
 }
+
 let viewing=null;
 function openView(d){
   if(!d) return; viewing=d;
-  $("#vPaper").innerHTML=paperHTML(d); $("#vConvert").hidden=d.type!=="quote"; $("#vPay").hidden=!(docOwed(d)>0); $("#vShip").hidden=!(d.ful==="ship"&&!d.deliveredAt&&d.type!=="quote");
+  $("#vPaper").innerHTML=paperHTML(d, "a4"); $("#vConvert").hidden=d.type!=="quote"; $("#vPay").hidden=!(docOwed(d)>0); $("#vShip").hidden=!(d.ful==="ship"&&!d.deliveredAt&&d.type!=="quote");
   $("#vPhone").textContent = d.showPhone===false ? "แสดงเบอร์โทร" : "ซ่อนเบอร์โทร"; $("#vPhoto").hidden=!d.photoId;
   if(!$("#dView").open) $("#dView").showModal();
 }
@@ -1156,14 +1227,20 @@ $("#vPhone").addEventListener("click",async()=>{
   catch(e){ toast("บันทึกไม่สำเร็จ"); }
 });
 $("#vPhoto").addEventListener("click",()=>{ if(viewing?.photoId){ $("#iBig").src=assetUrl(viewing.photoId); $("#dImg").showModal(); } });
-$("#vPrint").addEventListener("click",()=>{
-  $("#printArea").innerHTML=paperHTML(viewing); $("#dView").close();
-  setTimeout(()=>{ try{ window.print(); }catch(e){ toast("พิมพ์จากหน้านี้ไม่ได้ ใช้ปุ่มบันทึกไฟล์แทน"); } },50);
-});
+
+function printDoc(d, format = "a4"){
+  if(!d) return;
+  $("#printArea").innerHTML = paperHTML(d, format);
+  setTimeout(()=>{ try{ window.print(); }catch(e){ toast("พิมพ์จากหน้านี้ไม่ได้ ใช้ปุ่มบันทึกไฟล์แทน"); } }, 50);
+}
+
+$("#vPrint").addEventListener("click", () => printDoc(viewing, "a4"));
+$("#vPrintSlip")?.addEventListener("click", () => printDoc(viewing, "slip"));
+
 $("#vSave").addEventListener("click",async()=>{
   if(!downloads) return;
   const css=document.getElementById("paperCss").textContent;
-  const html=`<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(viewing.no)}</title><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff}${css}</style></head><body>${paperHTML(viewing)}<script>window.onload=()=>setTimeout(()=>print(),400)<\/script></body></html>`;
+  const html=`<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(viewing.no)}</title><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff}${css}</style></head><body>${paperHTML(viewing,"a4")}<script>window.onload=()=>setTimeout(()=>print(),400)<\/script></body></html>`;
   try{ await downloads.save({filename:`${viewing.no} ${viewing.customer}.html`,data:html}); toast("บันทึกไฟล์แล้ว เปิดไฟล์เพื่อพิมพ์หรือส่งต่อ"); }
   catch(e){ if(e&&e.code!=="declined") toast("บันทึกไฟล์ไม่สำเร็จ"); }
 });
@@ -1173,15 +1250,187 @@ $("#vDel").addEventListener("click",async()=>{
   try{ await store.del("docs/"+viewing.id); $("#dView").close(); toast("ลบเอกสารแล้ว"); }catch(e){ toast("ลบไม่สำเร็จ"); }
 });
 
-/* ===================== roles, audit, payments, PromptPay ===================== */
-let userCap=null, me="", realOwner=true, staffPreview=false;
-const isStaff=()=>!realOwner||staffPreview;
+/* ===================== roles, PIN authentication, audit ===================== */
+let currentRole = localStorage.getItem("khlang_lek_role") || "owner";
+let userCap = null, me = "", realOwner = (currentRole === "owner"), staffPreview = false;
+const isStaff = () => !realOwner || staffPreview;
+
 function applyRole(){
-  document.body.classList.toggle("staff",isStaff()); document.body.classList.toggle("realstaff",!realOwner);
-  $("#roleInfo").textContent = realOwner ? (staffPreview?"เจ้าของ (กำลังดูแบบลูกน้อง: ไม่เห็นต้นทุน/กำไร)":"เจ้าของร้าน — เห็นทุกอย่าง") : "ลูกน้อง — ไม่เห็นต้นทุนและกำไร";
-  if(isStaff()&&moneyView==="profit") document.querySelector('.segbar [data-mv=cash]').click();
+  realOwner = (currentRole === "owner");
+  document.body.classList.toggle("staff", isStaff());
+  document.body.classList.toggle("realstaff", !realOwner);
+  const roleBtn = $("#roleBtn");
+  if(roleBtn){
+    const icon = $("#roleIcon"); if(icon) icon.textContent = realOwner ? "👑" : "👤";
+    const text = $("#roleText"); if(text) text.textContent = realOwner ? "เจ้าของ" : "ลูกน้อง";
+    roleBtn.title = realOwner ? "สิทธิ์: เจ้าของร้าน (แตะเพื่อสลับเป็นลูกน้อง/ล็อก)" : "สิทธิ์: ลูกน้อง (แตะเพื่อใส่รหัสปลดล็อกเจ้าของร้าน)";
+  }
+  const roleInfo = $("#roleInfo");
+  if(roleInfo){
+    roleInfo.textContent = realOwner ? (staffPreview ? "เจ้าของ (กำลังดูแบบลูกน้อง: ไม่เห็นต้นทุน/กำไร)" : "เจ้าของร้าน — มีสิทธิ์เต็มทุกฟังก์ชัน") : "ลูกน้อง (แคชเชียร์) — ซ่อนต้นทุนและกำไร";
+  }
+  if(isStaff() && moneyView === "profit") {
+    const cashTab = document.querySelector('.segbar [data-mv=cash]');
+    if(cashTab) cashTab.click();
+  }
 }
-$("#staffPrev").addEventListener("change",e=>{ staffPreview=e.target.checked; applyRole(); render(); });
+$("#staffPrev")?.addEventListener("change", e => { staffPreview = e.target.checked; applyRole(); render(); });
+
+/* ---------- PIN Keypad Controller ---------- */
+let pinBuffer = "";
+let pinActiveOptions = null;
+
+function updatePinDots(len = 4){
+  const dotsContainer = $("#pinDots");
+  if(!dotsContainer) return;
+  let html = "";
+  for(let i = 0; i < len; i++){
+    html += `<span class="dot ${i < pinBuffer.length ? 'filled' : ''}"></span>`;
+  }
+  dotsContainer.innerHTML = html;
+}
+
+function openPinPad({ title, desc, avatar = "🔐", hint, maxLen = 4, target = "any", onDone, cancellable = true }){
+  pinBuffer = "";
+  pinActiveOptions = { title, desc, avatar, hint, maxLen, target, onDone, cancellable };
+  if($("#pinAvatar")) $("#pinAvatar").textContent = avatar;
+  if($("#pinTitle")) $("#pinTitle").textContent = title || "ใส่รหัส PIN";
+  if($("#pinDesc")) $("#pinDesc").textContent = desc || "กรุณากรอกรหัส PIN 4 หลัก";
+  if($("#pinError")) $("#pinError").textContent = "";
+  const cancelBtn = $("#pinCancelBtn");
+  if(cancelBtn) cancelBtn.style.display = cancellable ? "inline-block" : "none";
+  if(hint !== undefined && $("#pinHint")) $("#pinHint").innerHTML = hint;
+  updatePinDots(maxLen);
+  if(!$("#dPin").open) $("#dPin").showModal();
+}
+
+function onPinDigit(digit){
+  if(!pinActiveOptions) return;
+  const max = pinActiveOptions.maxLen || 4;
+  if(pinBuffer.length >= max) return;
+  pinBuffer += digit;
+  updatePinDots(max);
+  if($("#pinError")) $("#pinError").textContent = "";
+  if(pinBuffer.length >= max){
+    setTimeout(verifyEnteredPin, 60);
+  }
+}
+
+function onPinBackspace(){
+  if(!pinActiveOptions || !pinBuffer.length) return;
+  pinBuffer = pinBuffer.slice(0, -1);
+  updatePinDots(pinActiveOptions.maxLen || 4);
+  if($("#pinError")) $("#pinError").textContent = "";
+}
+
+function onPinClear(){
+  if(!pinActiveOptions) return;
+  pinBuffer = "";
+  updatePinDots(pinActiveOptions.maxLen || 4);
+  if($("#pinError")) $("#pinError").textContent = "";
+}
+
+function verifyEnteredPin(){
+  if(!pinActiveOptions) return;
+  const ownerPin = String(shop.ownerPin || "8888").trim();
+  const staffPin = String(shop.staffPin || "1111").trim();
+  const entered = pinBuffer;
+  const target = pinActiveOptions.target;
+
+  let success = false;
+  let resolvedRole = "";
+
+  if(target === "owner"){
+    if(entered === ownerPin){ success = true; resolvedRole = "owner"; }
+  } else if(target === "staff"){
+    if(entered === staffPin){ success = true; resolvedRole = "staff"; }
+  } else {
+    if(entered === ownerPin){ success = true; resolvedRole = "owner"; }
+    else if(entered === staffPin){ success = true; resolvedRole = "staff"; }
+  }
+
+  if(success){
+    $("#dPin").close();
+    const cb = pinActiveOptions.onDone;
+    pinActiveOptions = null;
+    pinBuffer = "";
+    if(cb) cb(resolvedRole);
+  } else {
+    const dots = $("#pinDots");
+    if(dots){
+      dots.classList.add("shake");
+      setTimeout(() => dots.classList.remove("shake"), 400);
+    }
+    if($("#pinError")) $("#pinError").textContent = "รหัส PIN ไม่ถูกต้อง ลองอีกครั้ง";
+    setTimeout(() => {
+      pinBuffer = "";
+      if(pinActiveOptions) updatePinDots(pinActiveOptions.maxLen || 4);
+    }, 450);
+  }
+}
+
+document.querySelectorAll(".pin-pad .pad-btn[data-key]").forEach(b => {
+  b.addEventListener("click", () => onPinDigit(b.dataset.key));
+});
+$("#pinBack")?.addEventListener("click", onPinBackspace);
+$("#pinClear")?.addEventListener("click", onPinClear);
+$("#pinCancelBtn")?.addEventListener("click", () => {
+  if(pinActiveOptions && pinActiveOptions.cancellable){
+    $("#dPin").close();
+    pinActiveOptions = null;
+    pinBuffer = "";
+  }
+});
+window.addEventListener("keydown", e => {
+  const pinModal = $("#dPin");
+  if(!pinModal || !pinModal.open) return;
+  if(e.key >= "0" && e.key <= "9"){
+    e.preventDefault();
+    onPinDigit(e.key);
+  } else if(e.key === "Backspace"){
+    e.preventDefault();
+    onPinBackspace();
+  } else if(e.key === "Escape"){
+    if(pinActiveOptions && pinActiveOptions.cancellable){
+      pinModal.close();
+      pinActiveOptions = null;
+      pinBuffer = "";
+    }
+  }
+});
+
+function handleSwitchUser(){
+  if(currentRole === "staff"){
+    openPinPad({
+      title: "ปลดล็อกสิทธิ์เจ้าของร้าน",
+      desc: "กรุณาใส่รหัส PIN เจ้าของร้านเพื่อดูต้นทุนและกำไร",
+      avatar: "👑",
+      target: "owner",
+      hint: `รหัสเริ่มต้นเจ้าของร้านคือ <b>${shop.ownerPin || "8888"}</b>`,
+      onDone: () => {
+        currentRole = "owner";
+        localStorage.setItem("khlang_lek_role", "owner");
+        applyRole();
+        render();
+        toast("ปลดล็อกสิทธิ์เจ้าของร้านเรียบร้อย 👑");
+      }
+    });
+  } else {
+    if(confirm("ต้องการสลับเป็นโหมด 'ลูกน้อง' (ซ่อนต้นทุนและกำไร) ใช่หรือไม่?")){
+      currentRole = "staff";
+      localStorage.setItem("khlang_lek_role", "staff");
+      applyRole();
+      render();
+      toast("สลับเป็นโหมดลูกน้องแล้ว 👤");
+    }
+  }
+}
+
+$("#roleBtn")?.addEventListener("click", handleSwitchUser);
+$("#btnSwitchPin")?.addEventListener("click", handleSwitchUser);
+$("#switchUserRow")?.addEventListener("click", e => {
+  if(e.target.id !== "btnSwitchPin") handleSwitchUser();
+});
 const names={}; let nameReq=null;
 function nameOf(id){
   if(!id||!userCap) return ""; if(id===me) return "คุณ";
@@ -1809,12 +2058,50 @@ attachCustPicker($("#qsCust"),c=>{ $("#qsCust").value=c.name; toast(`ลูก�
 
 /* ---------- shop info ---------- */
 const fs=$("#fShop");
-$("#shopBtn").addEventListener("click",()=>{ for(const k of ["name","phone","tax","addr","promptpay"]) fs[k].value=shop[k]||""; $("#dShop").showModal(); });
+function openShopModal(){
+  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote","ownerPin","staffPin"]){
+    if(fs[k]) fs[k].value = shop[k] || "";
+  }
+  if(fs.ownerPin) fs.ownerPin.value = shop.ownerPin || "8888";
+  if(fs.staffPin) fs.staffPin.value = shop.staffPin || "1111";
+  $("#dShop").showModal();
+}
+$("#shopBtn").addEventListener("click",()=>{
+  if(isStaff()){
+    openPinPad({
+      title: "ตั้งค่าร้านค้า (เจ้าของร้าน)",
+      desc: "กรุณาใส่รหัส PIN เจ้าของร้านเพื่อเข้าถึงการตั้งค่า",
+      avatar: "🔐",
+      target: "owner",
+      hint: `รหัสเริ่มต้นเจ้าของร้านคือ <b>${shop.ownerPin || "8888"}</b>`,
+      onDone: () => {
+        currentRole = "owner";
+        localStorage.setItem("khlang_lek_role", "owner");
+        applyRole();
+        render();
+        openShopModal();
+      }
+    });
+    return;
+  }
+  openShopModal();
+});
 fs.addEventListener("submit",async e=>{
   if(e.submitter&&e.submitter.value!=="save") return;
   e.preventDefault(); if(!fs.reportValidity()) return;
-  const v={}; for(const k of ["name","phone","tax","addr","promptpay"]) v[k]=fs[k].value.trim();
-  try{ await store.set("settings/shop",v); shop={...DEFAULT_SHOP,...v}; $("#shopTitle").textContent = shop.name ? `คลังเหล็ก · ${shop.name}` : "คลังเหล็ก"; $("#dShop").close(); toast("บันทึกข้อมูลร้านแล้ว"); }catch(err){ toast("บันทึกไม่สำเร็จ"); }
+  const v={};
+  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote","ownerPin","staffPin"]){
+    if(fs[k]) v[k]=fs[k].value.trim();
+  }
+  if(!v.ownerPin) v.ownerPin = "8888";
+  if(!v.staffPin) v.staffPin = "1111";
+  try{
+    await store.set("settings/shop",v);
+    shop={...DEFAULT_SHOP,...v};
+    $("#shopTitle").textContent = shop.name ? `คลังเหล็ก · ${shop.name}` : "คลังเหล็ก";
+    $("#dShop").close();
+    toast("บันทึกข้อมูลร้านและการตั้งค่าแล้ว");
+  }catch(err){ toast("บันทึกไม่สำเร็จ"); }
 });
 
 /* ---------- Excel export ---------- */

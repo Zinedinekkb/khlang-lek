@@ -131,9 +131,12 @@ label input,label select,label textarea{padding:9px 10px;border:1px solid var(--
 .preview{overflow-x:auto;margin:10px -4px 0;padding:4px}
 #printArea{display:none}
 @media print{
-  body{background:#fff}
+  @page{margin:4mm;size:auto}
+  body{background:#fff !important;color:#000 !important;margin:0 !important;padding:0 !important}
   body > *:not(#printArea){display:none !important}
-  #printArea{display:block}
+  #printArea{display:block !important;width:100% !important;margin:0 !important;padding:0 !important}
+  .paper.paper-slip{width:76mm !important;max-width:76mm !important;margin:0 auto !important;padding:0 !important;font-size:11.5px !important;color:#000 !important}
+  .paper.paper-slip img{filter:grayscale(100%) contrast(150%) !important}
 }
 .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg label{flex:1;flex-direction:row;gap:0;color:var(--ink);font-size:.95rem}
@@ -323,3 +326,33 @@ body.staff .oline .st{grid-template-columns:minmax(0,1.6fr) auto}
 .sugg button small{display:block;color:var(--muted);font-size:.76rem}
 .sugg button.on,.sugg button:active{background:color-mix(in srgb,var(--hazard) 25%,var(--panel))}
 .sugg .tag{font-size:.66rem}
+
+/* Role badge & switcher button in header */
+.head-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.role-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;transition:all .15s ease}
+.role-btn:hover{background:var(--bg);border-color:var(--steel)}
+body.staff .role-btn{border-color:#6366f1;background:rgba(99,102,241,.1);color:#4f46e5}
+
+.btn.accent{background:color-mix(in srgb,var(--hazard) 15%,var(--panel));border-color:var(--hazard);color:var(--ink);font-weight:600}
+.btn.accent:hover{background:var(--hazard);color:#111}
+
+/* PIN Auth Modal */
+.pin-modal{border:0;border-radius:18px;padding:0;background:var(--panel);color:var(--ink);box-shadow:0 16px 40px rgba(0,0,0,.35);max-width:330px;width:92%;margin:auto}
+.pin-modal::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(5px)}
+.pin-sheet{padding:24px 20px 20px;text-align:center;display:flex;flex-direction:column;align-items:center}
+.pin-avatar{font-size:2.2rem;margin-bottom:6px}
+.pin-header h2{font-size:1.25rem;margin:0 0 4px}
+.pin-desc{font-size:.82rem;color:var(--muted);margin:0 0 16px}
+.pin-dots{display:flex;justify-content:center;gap:14px;margin-bottom:12px}
+.pin-dots .dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--steel);background:transparent;transition:all .15s ease}
+.pin-dots .dot.filled{background:var(--steel);transform:scale(1.15)}
+.pin-error{min-height:20px;font-size:.82rem;color:var(--low);font-weight:500;margin-bottom:10px}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:250px}
+.pad-btn{aspect-ratio:1;border-radius:50%;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:1.4rem;font-weight:600;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;transition:all .1s ease;user-select:none}
+.pad-btn:active{background:var(--steel);color:#fff;transform:scale(.95)}
+.pad-btn.pad-action{font-size:.95rem;background:transparent;border-color:transparent;color:var(--muted)}
+.pad-btn.pad-action:active{background:var(--line);color:var(--ink)}
+.pin-footer{margin-top:14px;text-align:center;width:100%}
+.pin-hint{font-size:.75rem;color:var(--muted);margin:6px 0 0}
+.pin-dots.shake{animation:pinShake .35s ease}
+@keyframes pinShake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
