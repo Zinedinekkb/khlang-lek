@@ -89,6 +89,78 @@ async function init(){
   initAuth();
 }
 
+/* ---------- stock table render & view toggle ---------- */
+let stockView = localStorage.getItem("khlang_stock_view") || (window.innerWidth >= 1024 ? "table" : "grid");
+
+function setStockView(v){
+  stockView = v;
+  localStorage.setItem("khlang_stock_view", v);
+  const btnTable = $("#btnViewTable");
+  const btnGrid = $("#btnViewGrid");
+  const wrap = $("#stockTableWrap");
+  const list = $("#list");
+  if(btnTable) btnTable.classList.toggle("active", stockView === "table");
+  if(btnGrid) btnGrid.classList.toggle("active", stockView === "grid");
+  
+  const isDesktop = window.innerWidth >= 1024;
+  if(isDesktop){
+    if(wrap) wrap.hidden = (stockView !== "table");
+    if(list) list.hidden = (stockView === "table");
+  } else {
+    if(wrap) wrap.hidden = true;
+    if(list) list.hidden = false;
+  }
+}
+
+function renderStockTable(shown){
+  const tb = $("#stockTableBody");
+  if(!tb) return;
+  if(!shown.length){
+    tb.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:36px 16px;color:var(--muted)">${items.length ? "ไม่พบสินค้าที่ตรงกับการค้นหา" : "ยังไม่มีสินค้าในคลัง"}</td></tr>`;
+    return;
+  }
+  tb.innerHTML = shown.map(i => {
+    const low = isLow(i);
+    const rem = remOf(i);
+    const totalVal = itemVal(i);
+    const kgTot = Math.round(itemKg(i)*100)/100;
+    const isUsed = i.cond === "used";
+    return `
+    <tr class="${low ? "row-low" : ""}" data-id="${esc(i.id)}">
+      <td>
+        <div class="td-name-cell">
+          <span class="item-name">${esc(i.name)} ${low ? '<span class="tag due">ใกล้หมด</span>' : ''}</span>
+          ${rem.length ? `<span class="item-sub">✂ ท่อนเหลือ: ${esc(remSummary(i))}</span>` : ''}
+        </div>
+      </td>
+      <td>
+        <span class="tag ${isUsed ? "used" : "new"}">${isUsed ? "มือสอง" : "ใหม่"}</span>
+      </td>
+      <td><span style="color:var(--muted)">${esc(i.cat || "—")}</span></td>
+      <td><b>${esc(i.spec || "—")}</b></td>
+      <td><span style="color:var(--muted)">${esc(i.loc || "—")}</span></td>
+      <td class="r">
+        <b class="num ${low ? "neg" : ""}">${fmt(i.qty)}</b> <small style="color:var(--muted)">${esc(i.unit)}</small>
+      </td>
+      <td class="r">
+        ${+i.price > 0 ? `
+          <b class="num">${money(i.price)}</b> ฿<br>
+          ${+i.kg > 0 && i.unit !== "กก." ? `<small style="color:var(--muted)">(${money(i.price/i.kg)}/กก.)</small>` : ''}
+        ` : `<span style="color:var(--muted);font-size:.78rem">ยังไม่ตั้ง</span>`}
+      </td>
+      <td class="r">
+        ${+i.kg > 0 ? `<span class="num">${fmt(kgTot)}</span> <small style="color:var(--muted)">กก.</small>` : '—'}
+      </td>
+      <td class="r">
+        <b class="num">${money(totalVal)}</b> ฿
+      </td>
+      <td class="c">
+        <button type="button" class="btn-table-action" data-act-id="${esc(i.id)}">จัดการ</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
 /* ---------- render ---------- */
 const isLow = i => (+i.min||0)>0 && (+i.qty||0)<=(+i.min||0);
 function render(){
@@ -108,6 +180,8 @@ function render(){
         : `<span class="noprice">ยังไม่ตั้งราคาขาย</span>`}</div>
     </button>`).join("")
     : `<div class="empty">${items.length?"ไม่พบสินค้าที่ตรงกับการค้นหา":"ยังไม่มีสินค้าในคลัง<br><button class='btn primary' id='emptyAdd'>เพิ่มสินค้าชิ้นแรก</button>"}</div>`;
+  renderStockTable(shown);
+  setStockView(stockView);
   $("#sCount").textContent=fmt(items.length);
   $("#sValue").textContent=fmt(Math.round(items.reduce((s,i)=>s+itemVal(i),0)));
   $("#sKg").textContent=fmt(Math.round(items.reduce((s,i)=>s+itemKg(i),0)));
@@ -181,12 +255,54 @@ const FAB={stock:"+ เพิ่มสินค้า",buy:"+ ซื้อเข
 const TITLE={stock:"สต็อก",buy:"ซื้อเข้า",doc:"ใบเสนอราคา / ใบเสร็จ",money:"การเงิน",more:"เพิ่มเติม"};
 let moneyView="cash";
 function setFab(){ const t= tab==="money"&&moneyView!=="cash" ? "" : FAB[tab]; $("#fab").hidden=!t; $("#fab").textContent=t; }
-document.querySelectorAll(".tabbar button").forEach(b=>b.addEventListener("click",()=>{
-  tab=b.dataset.tab;
-  document.querySelectorAll(".tabbar button").forEach(x=>x.setAttribute("aria-selected",x===b));
+function switchTab(newTab){
+  tab=newTab;
+  document.querySelectorAll(".tabbar button").forEach(x=>x.setAttribute("aria-selected",x.dataset.tab===tab));
+  document.querySelectorAll(".desktop-nav-item").forEach(x=>{
+    const isSel = x.dataset.tab===tab;
+    x.setAttribute("aria-selected", isSel);
+    x.classList.toggle("active", isSel);
+  });
   ["stock","buy","doc","money","more"].forEach(t=>$("#tab-"+t).hidden=t!==tab);
   $("#pageTitle").textContent=TITLE[tab]; $("#main").scrollTop=0; setFab();
-}));
+}
+document.querySelectorAll(".tabbar button, .desktop-nav-item").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+
+/* Desktop Sidebar controls */
+const sidebar = $("#sidebar");
+const btnToggleSidebar = $("#btnToggleSidebar");
+if(sidebar && btnToggleSidebar){
+  const isCollapsed = localStorage.getItem("khlang_sidebar_collapsed") === "true";
+  if(isCollapsed) sidebar.classList.add("collapsed");
+  btnToggleSidebar.addEventListener("click", () => {
+    sidebar.classList.toggle("collapsed");
+    localStorage.setItem("khlang_sidebar_collapsed", sidebar.classList.contains("collapsed"));
+  });
+}
+$("#sidebarUserBox")?.addEventListener("click", () => {
+  if(!getAuthState().user){
+    if(!$("#dAuth")?.open) $("#dAuth")?.showModal();
+    return;
+  }
+  openUserMenuModal();
+});
+$("#sidebarUserMgmtBtn")?.addEventListener("click", () => {
+  if(!realOwner){
+    toast("เฉพาะเจ้าของร้านเท่านั้นที่สามารถจัดการผู้ใช้ได้ 👑");
+    return;
+  }
+  openUsersModal();
+});
+
+/* View switcher (Table vs Grid) & resize listener */
+$("#btnViewTable")?.addEventListener("click", () => setStockView("table"));
+$("#btnViewGrid")?.addEventListener("click", () => setStockView("grid"));
+window.addEventListener("resize", () => setStockView(stockView));
+$("#stockTableBody")?.addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-id]");
+  if(tr) openMove(tr.dataset.id);
+});
+
 document.querySelectorAll(".segbar button").forEach(b=>b.addEventListener("click",()=>{
   moneyView=b.dataset.mv;
   document.querySelectorAll(".segbar button").forEach(x=>x.setAttribute("aria-selected",x===b));
@@ -1278,13 +1394,16 @@ function applyRole(){
   document.body.classList.toggle("staff", isActualStaff);
   document.body.classList.toggle("realstaff", !realOwner);
   const userBtn = $("#userBadgeBtn");
+  const currentName = getAuthState().profile?.displayName || getAuthState().user?.email?.split("@")[0] || (realOwner ? "เจ้าของ" : "ลูกน้อง");
   if(userBtn){
     const icon = $("#userRoleIcon"); if(icon) icon.textContent = realOwner ? "👑" : "👤";
     const text = $("#userNameText");
-    const currentName = getAuthState().profile?.displayName || getAuthState().user?.email?.split("@")[0] || (realOwner ? "เจ้าของ" : "ลูกน้อง");
     if(text) text.textContent = currentName;
     userBtn.title = realOwner ? `สิทธิ์: เจ้าของร้าน (${currentName})` : `สิทธิ์: ลูกน้อง/พนักงาน (${currentName})`;
   }
+  const sbName = $("#sidebarUserName"); if(sbName) sbName.textContent = currentName;
+  const sbRole = $("#sidebarUserRole"); if(sbRole) sbRole.textContent = realOwner ? (staffPreview ? "เจ้าของ (โหมดลูกน้อง)" : "เจ้าของร้าน 👑") : "พนักงาน 👤";
+  const sbAvatar = $("#sidebarAvatar"); if(sbAvatar) sbAvatar.textContent = realOwner ? "👑" : "👤";
   const roleInfo = $("#roleInfo");
   if(roleInfo){
     roleInfo.textContent = realOwner ? (staffPreview ? "เจ้าของ (กำลังดูแบบลูกน้อง: ซ่อนต้นทุน/กำไร)" : "เจ้าของร้าน — มีสิทธิ์เต็มทุกฟังก์ชัน") : "ลูกน้อง (แคชเชียร์) — ซ่อนต้นทุนและกำไร";
@@ -1312,6 +1431,9 @@ function handleAuthStateChange(auth){
     const iconEl = $("#userRoleIcon"); if(iconEl) iconEl.textContent = "👤";
     const moreEmail = $("#moreUserEmail"); if(moreEmail) moreEmail.textContent = "ยังไม่ได้เข้าสู่ระบบ";
     const moreRole = $("#roleInfo"); if(moreRole) moreRole.textContent = "กรุณาเข้าสู่ระบบ";
+    const sbName = $("#sidebarUserName"); if(sbName) sbName.textContent = "เข้าสู่ระบบ";
+    const sbRole = $("#sidebarUserRole"); if(sbRole) sbRole.textContent = "กรุณาเข้าสู่ระบบ";
+    const sbAvatar = $("#sidebarAvatar"); if(sbAvatar) sbAvatar.textContent = "👤";
     return;
   }
 
@@ -1356,6 +1478,9 @@ function handleAuthStateChange(auth){
   const nameEl = $("#userNameText"); if(nameEl) nameEl.textContent = currentDisplayName;
   const iconEl = $("#userRoleIcon"); if(iconEl) iconEl.textContent = realOwner ? "👑" : "👤";
   const moreEmail = $("#moreUserEmail"); if(moreEmail) moreEmail.textContent = auth.user.email;
+  const sbName = $("#sidebarUserName"); if(sbName) sbName.textContent = currentDisplayName;
+  const sbRole = $("#sidebarUserRole"); if(sbRole) sbRole.textContent = realOwner ? "เจ้าของร้าน 👑" : "พนักงาน 👤";
+  const sbAvatar = $("#sidebarAvatar"); if(sbAvatar) sbAvatar.textContent = realOwner ? "👑" : "👤";
 
   applyRole();
   render();
