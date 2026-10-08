@@ -128,15 +128,41 @@ label input,label select,label textarea{padding:9px 10px;border:1px solid var(--
 .line .sub{grid-column:1/-1;text-align:right;font-size:.85rem}
 .check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:.95rem}
 .check input{width:20px;height:20px}
-.preview{overflow-x:auto;margin:10px -4px 0;padding:4px}
+/* Document Preview & Format Switcher */
+.doc-format-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;margin-bottom:10px;flex-wrap:wrap}
+.doc-format-tabs{display:flex;flex:1;min-width:260px;align-items:center;gap:3px;background:var(--panel);padding:3px;border-radius:6px;border:1px solid var(--line)}
+.fmt-tab{flex:1;text-align:center;background:none;border:none;padding:6px 8px;border-radius:5px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s ease;font-family:inherit;white-space:nowrap}
+.fmt-tab:hover{color:var(--ink);background:rgba(0,0,0,0.05)}
+.fmt-tab.on{background:var(--steel);color:#fff;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.15)}
+#vPrintCurrent{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:600;padding:7px 16px;white-space:nowrap}
+@media (max-width: 600px){
+  .doc-format-toolbar{flex-direction:column;align-items:stretch}
+  .doc-format-tabs{width:100%}
+  #vPrintCurrent{width:100%}
+}
+.preview{overflow-x:auto;margin:10px 0;padding:16px 10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;display:flex;justify-content:center;min-height:220px}
 #printArea{display:none}
+
 @media print{
-  @page{margin:4mm;size:auto}
   body{background:#fff !important;color:#000 !important;margin:0 !important;padding:0 !important}
   body > *:not(#printArea){display:none !important}
   #printArea{display:block !important;width:100% !important;margin:0 !important;padding:0 !important}
-  .paper.paper-slip{width:76mm !important;max-width:76mm !important;margin:0 auto !important;padding:0 !important;font-size:11.5px !important;color:#000 !important}
-  .paper.paper-slip img{filter:grayscale(100%) contrast(150%) !important}
+  
+  /* Print 80mm roll */
+  body.printing-slip-80 #printArea{width:76mm !important;max-width:76mm !important;margin:0 auto !important}
+  body.printing-slip-80 .paper.paper-slip.slip-80mm{width:76mm !important;max-width:76mm !important;box-shadow:none !important;margin:0 auto !important;padding:2mm 1mm 12mm 1mm !important;font-size:11.5px !important;color:#000 !important}
+  
+  /* Print 58mm roll */
+  body.printing-slip-58 #printArea{width:50mm !important;max-width:50mm !important;margin:0 auto !important}
+  body.printing-slip-58 .paper.paper-slip.slip-58mm{width:50mm !important;max-width:50mm !important;box-shadow:none !important;margin:0 auto !important;padding:2mm 0 10mm 0 !important;font-size:10px !important;color:#000 !important}
+  
+  /* Print A4 */
+  body.printing-a4 #printArea{width:100% !important;margin:0 auto !important}
+  body.printing-a4 .paper.paper-a4{box-shadow:none !important;margin:0 auto !important;padding:6mm 4mm !important;width:100% !important;max-width:760px !important}
+  
+  /* Universal thermal printing rules */
+  .paper.paper-slip img{filter:grayscale(100%) contrast(200%) !important;image-rendering:pixelated !important}
+  .paper *{page-break-inside:avoid;break-inside:avoid}
 }
 .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg label{flex:1;flex-direction:row;gap:0;color:var(--ink);font-size:.95rem}
@@ -978,7 +1004,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     max-height: 88vh;
     box-shadow: 0 24px 60px rgba(0,0,0,0.3);
   }
-  dialog#dDoc, dialog#dOrder, dialog#dReview, dialog#dCust, dialog#dEdit {
+  dialog#dDoc, dialog#dOrder, dialog#dReview, dialog#dCust, dialog#dEdit, dialog#dView {
     max-width: 880px;
   }
   .sheet {

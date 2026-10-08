@@ -28,7 +28,7 @@ const money = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const dstr = t => new Date(t).toLocaleString("th-TH",{dateStyle:"short",timeStyle:"short"});
 const dlong = t => new Date(t).toLocaleDateString("th-TH",{year:"numeric",month:"long",day:"numeric"});
-const DEFAULT_SHOP = {name:"", phone:"", tax:"", addr:"", promptpay:"", bankName:"", bankAcc:"", bankHolder:"", billNote:"สินค้าซื้อแล้วไม่รับเปลี่ยนหรือคืน · โปรดตรวจนับสินค้าก่อนรับมอบ", ownerPin:"8888", staffPin:"1111"};
+const DEFAULT_SHOP = {name:"", phone:"", tax:"", addr:"", promptpay:"", bankName:"", bankAcc:"", bankHolder:"", billNote:"สินค้าซื้อแล้วไม่รับเปลี่ยนหรือคืน · โปรดตรวจนับสินค้าก่อนรับมอบ", ownerPin:"8888", staffPin:"1111", slipWidth:"80mm", defaultPrint:"slip", autoPrintQuick:false, showPromptpaySlip:true, showBankSlip:true};
 
 let items=[], moves=[], buys=[], docs=[], cash=[], shop={...DEFAULT_SHOP};
 let cat="ทั้งหมด", docFilter="ทั้งหมด", buyFilter="ทั้งหมด", tab="stock", current=null, store, downloads=null, assets=null, sample=null, sampleImg=false;
@@ -1256,17 +1256,89 @@ function bahtText(n){
   return (b?rd(b)+"บาท":(st?"":"ศูนย์บาท"))+(st?rd(st)+"สตางค์":"ถ้วน");
 }
 function paperHTML(d, format = "a4"){
-  if(format === "slip"){
-    return `<div class="paper paper-slip">
+  // Resolve format
+  const resolvedFmt = (format === "slip") ? (shop.slipWidth === "58mm" ? "slip-58" : "slip-80") : format;
+
+  if(resolvedFmt === "slip-58"){
+    return `<div class="paper paper-slip slip-58mm">
   <div class="ph">
     <div class="shop">
       <b>${esc(shop.name || "คลังเหล็ก")}</b>
       ${shop.addr ? esc(shop.addr) + "<br>" : ""}
-      ${shop.phone && d.showPhone !== false ? "โทร " + esc(shop.phone) : ""}
-      ${shop.tax ? "<br>เลขผู้เสียภาษี " + esc(shop.tax) : ""}
+      ${shop.phone && d.showPhone !== false ? "โทร: " + esc(shop.phone) : ""}
+      ${shop.tax ? (shop.phone && d.showPhone !== false ? "<br>" : "") + "Tax: " + esc(shop.tax) : ""}
     </div>
     <div class="dt">
-      <h2>${d.type === "credit" ? "ใบส่งของ / ใบแจ้งหนี้" : DOCNAME[d.type]}</h2>
+      <h2>${d.type === "credit" ? "ใบส่งของ/ใบแจ้งหนี้" : (d.type === "quote" ? "ใบเสนอราคา" : "ใบเสร็จรับเงิน")}</h2>
+      <div>เลขที่: <b>${esc(d.no)}</b></div>
+      <div>วันที่: ${dstr(d.date || d.at)}</div>
+      ${d.type === "credit" ? `<div>ครบกำหนด: ${dlong(d.due || d.date)}</div>` : ""}
+      <div>ออกโดย: ${currentRole === "owner" ? "เจ้าของร้าน" : "พนักงาน"}</div>
+    </div>
+  </div>
+  <div class="cust">
+    <b>ลูกค้า:</b> ${esc(d.customer)}
+    ${d.phone && d.showPhone !== false ? "<br>โทร: " + esc(d.phone) : ""}
+    ${d.ful === "ship" ? `<br><b>ส่งที่:</b> ${esc(d.shipAddr || "-")}` : ""}
+  </div>
+  <table>
+    <thead><tr><th style="text-align:left">รายการ / จำนวน</th><th class="r">รวม</th></tr></thead>
+    <tbody>
+    ${d.lines.map((l, i) => `<tr>
+      <td colspan="2" class="slip-item-name">${i + 1}. ${esc(l.name)}</td>
+    </tr>
+    ${l.cut?.label ? `<tr><td colspan="2" style="font-size:9.5px;color:#333;padding-left:4px">✂ ตัด: ${esc(l.cut.label)}</td></tr>` : ""}
+    <tr class="slip-item-calc">
+      <td>${fmt(l.qty)} ${esc(l.unit)} × ${money(l.price)}</td>
+      <td class="r"><b>${money(l.qty * l.price)}</b></td>
+    </tr>`).join("")}
+    </tbody>
+  </table>
+  <div class="tot">
+    <table>
+      <tr><td>รวมเป็นเงิน</td><td class="r">${money(d.sub)}</td></tr>
+      ${d.discount ? `<tr><td>ส่วนลด</td><td class="r">-${money(d.discount)}</td></tr>` : ""}
+      <tr><th style="font-size:12px">ยอดสุทธิ</th><th class="r" style="font-size:13px"><b>${money(d.total)}</b></th></tr>
+      ${d.cashGot ? `
+      <tr class="slip-cash-row"><td>รับเงินมา</td><td class="r">${money(d.cashGot)}</td></tr>
+      <tr class="slip-cash-row"><td>เงินทอน</td><td class="r"><b>${money(d.cashChange || 0)}</b></td></tr>
+      ` : ""}
+    </table>
+    <div class="words">(${bahtText(d.total)})</div>
+  </div>
+  ${d.type === "receipt" && d.via && !d.cashGot ? `<div class="note">ชำระ: <b>${esc(d.via)}</b></div>` : ""}
+  ${d.type === "credit" ? `<div class="note" style="border:1px dashed #000;padding:3px;margin-top:4px">จ่ายแล้ว ${money(sumPay(d.payments))} · <b>ค้าง ${money(docOwed(d))}</b></div>` : ""}
+  ${shop.showBankSlip !== false && shop.bankName && shop.bankAcc ? `
+  <div class="bank-box">
+    <div><b>โอนเข้า:</b> ${esc(shop.bankName)}</div>
+    <div>เลขที่: <b>${esc(shop.bankAcc)}</b></div>
+    ${shop.bankHolder ? `<div>ชื่อ: ${esc(shop.bankHolder)}</div>` : ""}
+  </div>` : ""}
+  ${shop.showPromptpaySlip !== false && (d.type === "quote" || (d.type === "credit" && docOwed(d) > 0) || d.type === "receipt") && shop.promptpay ? (() => {
+    const amt = d.type === "credit" ? docOwed(d) : (+d.total || 0);
+    const u = qrDataURL(ppPayload(shop.promptpay, amt));
+    return u ? `<div class="qrbox"><img src="${u}" alt="QR"><div>สแกนจ่ายพร้อมเพย์<br>ยอด <b>${money(amt)} บ.</b></div></div>` : "";
+  })() : ""}
+  ${d.note ? `<div class="note">${esc(d.note)}</div>` : ""}
+  <div class="slip-footer">
+    <div>${shop.billNote ? esc(shop.billNote) : "โปรดตรวจนับสินค้าก่อนรับมอบ"}</div>
+    <div style="margin-top:3px">ขอบคุณที่ใช้บริการ 🙏</div>
+  </div>
+  <div class="slip-cut-space"></div>
+</div>`;
+  }
+
+  if(resolvedFmt === "slip-80"){
+    return `<div class="paper paper-slip slip-80mm">
+  <div class="ph">
+    <div class="shop">
+      <b>${esc(shop.name || "คลังเหล็ก")}</b>
+      ${shop.addr ? esc(shop.addr) + "<br>" : ""}
+      ${shop.phone && d.showPhone !== false ? "โทร: " + esc(shop.phone) : ""}
+      ${shop.tax ? (shop.phone && d.showPhone !== false ? " · " : "") + "เลขผู้เสียภาษี: " + esc(shop.tax) : ""}
+    </div>
+    <div class="dt">
+      <h2>${d.type === "credit" ? "ใบส่งของ / ใบแจ้งหนี้" : (d.type === "quote" ? "ใบเสนอราคา" : "ใบเสร็จรับเงิน (บิลเงินสด)")}</h2>
       <div>เลขที่: <b>${esc(d.no)}</b></div>
       <div>วันที่: ${dstr(d.date || d.at)}</div>
       ${d.type === "credit" ? `<div>ครบกำหนด: ${dlong(d.due || d.date)}</div>` : ""}
@@ -1276,7 +1348,7 @@ function paperHTML(d, format = "a4"){
   <div class="cust">
     <b>ลูกค้า:</b> ${esc(d.customer)}
     ${d.phone && d.showPhone !== false ? "<br>โทร: " + esc(d.phone) : ""}
-    ${d.addr ? "<br>" + esc(d.addr) : ""}
+    ${d.addr ? "<br>ที่อยู่: " + esc(d.addr) : ""}
     ${d.ful === "ship" ? `<br><b>จัดส่งที่:</b> ${esc(d.shipAddr || "-")}${d.shipPhone && d.showPhone !== false ? " · ผู้รับ: " + esc(d.shipPhone) : ""}` : ""}
   </div>
   <table>
@@ -1285,6 +1357,7 @@ function paperHTML(d, format = "a4"){
     ${d.lines.map((l, i) => `<tr>
       <td colspan="4" class="slip-item-name">${i + 1}. ${esc(l.name)}</td>
     </tr>
+    ${l.cut?.label ? `<tr><td colspan="4" style="font-size:10.5px;color:#333;padding:0 2px 2px 8px">✂ ตัด: ${esc(l.cut.label)}</td></tr>` : ""}
     <tr class="slip-item-calc">
       <td></td>
       <td class="r">${fmt(l.qty)} ${esc(l.unit)}</td>
@@ -1297,19 +1370,23 @@ function paperHTML(d, format = "a4"){
     <table>
       <tr><td>รวมเป็นเงิน</td><td class="r">${money(d.sub)}</td></tr>
       ${d.discount ? `<tr><td>ส่วนลด</td><td class="r">-${money(d.discount)}</td></tr>` : ""}
-      <tr><th style="font-size:13px">ยอดสุทธิ</th><th class="r" style="font-size:14px"><b>${money(d.total)} บาท</b></th></tr>
+      <tr><th style="font-size:13.5px">ยอดสุทธิ</th><th class="r" style="font-size:14.5px"><b>${money(d.total)} บาท</b></th></tr>
+      ${d.cashGot ? `
+      <tr class="slip-cash-row"><td>รับเงินมา (${esc(d.via || "เงินสด")})</td><td class="r">${money(d.cashGot)}</td></tr>
+      <tr class="slip-cash-row"><td>เงินทอน</td><td class="r"><b>${money(d.cashChange || 0)}</b></td></tr>
+      ` : ""}
     </table>
     <div class="words">(${bahtText(d.total)})</div>
   </div>
-  ${d.type === "receipt" && d.via ? `<div class="note">ชำระโดย: <b>${esc(d.via)}</b></div>` : ""}
-  ${d.type === "credit" ? `<div class="note" style="border:1px dashed #000;padding:4px">ชำระแล้ว ${money(sumPay(d.payments))} บาท · <b>คงค้าง ${money(docOwed(d))} บาท</b></div>` : ""}
-  ${shop.bankName && shop.bankAcc ? `
+  ${d.type === "receipt" && d.via && !d.cashGot ? `<div class="note">ชำระโดย: <b>${esc(d.via)}</b></div>` : ""}
+  ${d.type === "credit" ? `<div class="note" style="border:1px dashed #000;padding:4px;margin-top:6px">ชำระแล้ว ${money(sumPay(d.payments))} บาท · <b>คงค้าง ${money(docOwed(d))} บาท</b></div>` : ""}
+  ${shop.showBankSlip !== false && shop.bankName && shop.bankAcc ? `
   <div class="bank-box">
     <div><b>โอนเข้าบัญชี:</b> ${esc(shop.bankName)}</div>
     <div>เลขที่: <b>${esc(shop.bankAcc)}</b></div>
     ${shop.bankHolder ? `<div>ชื่อบัญชี: ${esc(shop.bankHolder)}</div>` : ""}
   </div>` : ""}
-  ${(d.type === "quote" || (d.type === "credit" && docOwed(d) > 0) || d.type === "receipt") && shop.promptpay ? (() => {
+  ${shop.showPromptpaySlip !== false && (d.type === "quote" || (d.type === "credit" && docOwed(d) > 0) || d.type === "receipt") && shop.promptpay ? (() => {
     const amt = d.type === "credit" ? docOwed(d) : (+d.total || 0);
     const u = qrDataURL(ppPayload(shop.promptpay, amt));
     return u ? `<div class="qrbox"><img src="${u}" alt="QR"><div>สแกนจ่ายพร้อมเพย์: ${esc(shop.promptpay)}<br>ยอดชำระ <b>${money(amt)} บาท</b></div></div>` : "";
@@ -1319,6 +1396,7 @@ function paperHTML(d, format = "a4"){
     <div>${shop.billNote ? esc(shop.billNote) : "สินค้าซื้อแล้วไม่รับเปลี่ยนหรือคืน · โปรดตรวจนับสินค้าก่อนรับมอบ"}</div>
     <div style="margin-top:4px">ขอบคุณที่ใช้บริการ 🙏</div>
   </div>
+  <div class="slip-cut-space"></div>
 </div>`;
   }
 
@@ -1329,15 +1407,23 @@ function paperHTML(d, format = "a4"){
   <div class="cust"><b>ลูกค้า:</b> ${esc(d.customer)}${d.phone && d.showPhone !== false ? " · โทร " + esc(d.phone) : ""}${d.addr ? "<br>" + esc(d.addr) : ""}
   ${d.ful === "ship" ? `<br><b>จัดส่งที่:</b> ${esc(d.shipAddr || "-")}${d.shipPhone && d.showPhone !== false ? " · ผู้รับ โทร " + esc(d.shipPhone) : ""}${d.shipDate ? " · วันที่ส่ง " + dlong(d.shipDate) : ""}` : d.ful === "pickup" ? `<br><b>การรับสินค้า:</b> ลูกค้ามารับเอง` : ""}</div>
   <table><thead><tr><th class="r">#</th><th>รายการ</th><th class="r">จำนวน</th><th class="r">ราคา/หน่วย</th><th class="r">จำนวนเงิน</th></tr></thead><tbody>
-  ${d.lines.map((l, i) => `<tr><td class="r">${i + 1}</td><td>${esc(l.name)}</td><td class="r">${fmt(l.qty)} ${esc(l.unit)}</td><td class="r">${money(l.price)}</td><td class="r">${money(l.qty * l.price)}</td></tr>`).join("")}
+  ${d.lines.map((l, i) => `<tr><td class="r">${i + 1}</td><td>${esc(l.name)}${l.cut?.label ? ` <small style="color:#555">(✂ ${esc(l.cut.label)})</small>` : ""}</td><td class="r">${fmt(l.qty)} ${esc(l.unit)}</td><td class="r">${money(l.price)}</td><td class="r">${money(l.qty * l.price)}</td></tr>`).join("")}
   </tbody></table>
   <div class="tot"><div class="words">(${bahtText(d.total)})</div>
-  <table><tr><td>รวม</td><td class="r">${money(d.sub)}</td></tr>${d.discount ? `<tr><td>ส่วนลด</td><td class="r">-${money(d.discount)}</td></tr>` : ""}<tr><th>ยอดสุทธิ</th><th class="r">${money(d.total)}</th></tr></table></div>
+  <table>
+    <tr><td>รวม</td><td class="r">${money(d.sub)}</td></tr>
+    ${d.discount ? `<tr><td>ส่วนลด</td><td class="r">-${money(d.discount)}</td></tr>` : ""}
+    <tr><th>ยอดสุทธิ</th><th class="r">${money(d.total)}</th></tr>
+    ${d.cashGot ? `
+    <tr><td>รับเงินมา (${esc(d.via || "เงินสด")})</td><td class="r">${money(d.cashGot)}</td></tr>
+    <tr><td>เงินทอน</td><td class="r"><b>${money(d.cashChange || 0)}</b></td></tr>
+    ` : ""}
+  </table></div>
   ${shop.bankName && shop.bankAcc ? `
   <div class="bank-box"><b>ข้อมูลการโอนเงินเข้าบัญชี:</b> ธนาคาร ${esc(shop.bankName)} · เลขที่บัญชี: <b>${esc(shop.bankAcc)}</b> ${shop.bankHolder ? `· ชื่อบัญชี: ${esc(shop.bankHolder)}` : ""}</div>` : ""}
   ${d.note ? `<div class="note">หมายเหตุ: ${esc(d.note)}</div>` : ""}
   ${d.type === "quote" ? `<div class="note">ยืนราคา 7 วันนับจากวันที่ในเอกสาร</div>` : ""}
-  ${d.type === "receipt" && d.via ? `<div class="note">ชำระโดย ${esc(d.via)}</div>` : ""}
+  ${d.type === "receipt" && d.via && !d.cashGot ? `<div class="note">ชำระโดย ${esc(d.via)}</div>` : ""}
   ${d.type === "credit" ? `<div class="paystat">ชำระแล้ว ${money(sumPay(d.payments))} บาท · <b>คงค้าง ${money(docOwed(d))} บาท</b>${(d.payments || []).length ? "<br>" + d.payments.map(p => `${dlong(p.date)} ${esc(p.via)} ${money(p.amount)}`).join(" · ") : ""}</div>` : ""}
   ${(d.type === "quote" || (d.type === "credit" && docOwed(d) > 0) || d.type === "receipt") && shop.promptpay ? (() => { const amt = d.type === "credit" ? docOwed(d) : (+d.total || 0), u = qrDataURL(ppPayload(shop.promptpay, amt)); return u ? `<div class="qrbox"><img src="${u}" alt="QR"><div>สแกนจ่ายพร้อมเพย์<br>${money(amt)} บาท</div></div>` : ""; })() : ""}
   ${shop.billNote ? `<div class="note" style="margin-top:8px;font-size:12px;color:#555">เงื่อนไข: ${esc(shop.billNote)}</div>` : ""}
@@ -1345,43 +1431,150 @@ function paperHTML(d, format = "a4"){
 </div>`;
 }
 
-let viewing=null;
-function openView(d){
-  if(!d) return; viewing=d;
-  $("#vPaper").innerHTML=paperHTML(d, "a4"); $("#vConvert").hidden=d.type!=="quote"; $("#vPay").hidden=!(docOwed(d)>0); $("#vShip").hidden=!(d.ful==="ship"&&!d.deliveredAt&&d.type!=="quote");
-  $("#vPhone").textContent = d.showPhone===false ? "แสดงเบอร์โทร" : "ซ่อนเบอร์โทร"; $("#vPhoto").hidden=!d.photoId;
+let viewing = null;
+let viewingFormat = "a4";
+
+function setViewingFormat(fmt){
+  viewingFormat = fmt;
+  document.querySelectorAll(".fmt-tab").forEach(tab => {
+    tab.classList.toggle("on", tab.dataset.fmt === fmt);
+  });
+  const btnPrintCurrent = $("#vPrintCurrent");
+  if(btnPrintCurrent){
+    const fmtLabel = fmt === "slip-80" ? "สลิป 80mm" : fmt === "slip-58" ? "สลิป 58mm" : "A4";
+    btnPrintCurrent.innerHTML = `🖨️ สั่งพิมพ์ (${fmtLabel})`;
+  }
+  if(viewing){
+    $("#vPaper").innerHTML = paperHTML(viewing, fmt);
+  }
+}
+
+function openView(d, initialFormat){
+  if(!d) return; viewing = d;
+  const defFmt = initialFormat || (shop.defaultPrint === "slip" ? (shop.slipWidth === "58mm" ? "slip-58" : "slip-80") : "a4");
+  setViewingFormat(defFmt);
+  $("#vConvert").hidden = d.type !== "quote";
+  $("#vPay").hidden = !(docOwed(d) > 0);
+  $("#vShip").hidden = !(d.ful === "ship" && !d.deliveredAt && d.type !== "quote");
+  $("#vPhone").textContent = d.showPhone === false ? "แสดงเบอร์โทร" : "ซ่อนเบอร์โทร";
+  $("#vPhoto").hidden = !d.photoId;
   if(!$("#dView").open) $("#dView").showModal();
 }
-$("#vClose").addEventListener("click",()=>$("#dView").close());
-$("#vPay").addEventListener("click",()=>{ const d=viewing; openPay({title:"รับชำระ "+d.no,info:`${d.customer} · คงค้าง ${money(docOwed(d))} บาท`,amount:docOwed(d),onSave:async p=>{
-  const payments=[...(d.payments||[]),p]; await store.update("docs/"+d.id,{payments}); openView({...d,payments}); }}); });
-$("#vPhone").addEventListener("click",async()=>{
-  if(!viewing) return; const show=viewing.showPhone===false;
-  try{ await store.update("docs/"+viewing.id,{showPhone:show}); viewing={...viewing,showPhone:show}; openView(viewing); toast(show?"แสดงเบอร์โทรบนเอกสารแล้ว":"ซ่อนเบอร์โทรบนเอกสารแล้ว"); }
-  catch(e){ toast("บันทึกไม่สำเร็จ"); }
-});
-$("#vPhoto").addEventListener("click",()=>{ if(viewing?.photoId){ $("#iBig").src=assetUrl(viewing.photoId); $("#dImg").showModal(); } });
 
-function printDoc(d, format = "a4"){
-  if(!d) return;
-  $("#printArea").innerHTML = paperHTML(d, format);
-  setTimeout(()=>{ try{ window.print(); }catch(e){ toast("พิมพ์จากหน้านี้ไม่ได้ ใช้ปุ่มบันทึกไฟล์แทน"); } }, 50);
+$("#vClose").addEventListener("click", () => $("#dView").close());
+$("#vPay").addEventListener("click", () => {
+  const d = viewing;
+  openPay({
+    title: "รับชำระ " + d.no,
+    info: `${d.customer} · คงค้าง ${money(docOwed(d))} บาท`,
+    amount: docOwed(d),
+    onSave: async p => {
+      const payments = [...(d.payments || []), p];
+      await store.update("docs/" + d.id, {payments});
+      openView({...d, payments}, viewingFormat);
+    }
+  });
+});
+$("#vPhone").addEventListener("click", async () => {
+  if(!viewing) return;
+  const show = viewing.showPhone === false;
+  try{
+    await store.update("docs/" + viewing.id, {showPhone: show});
+    viewing = {...viewing, showPhone: show};
+    openView(viewing, viewingFormat);
+    toast(show ? "แสดงเบอร์โทรบนเอกสารแล้ว" : "ซ่อนเบอร์โทรบนเอกสารแล้ว");
+  } catch(e){ toast("บันทึกไม่สำเร็จ"); }
+});
+$("#vPhoto").addEventListener("click", () => {
+  if(viewing?.photoId){
+    $("#iBig").src = assetUrl(viewing.photoId);
+    $("#dImg").showModal();
+  }
+});
+
+function setPrintPageStyle(format){
+  let styleEl = document.getElementById("printDynamicPage");
+  if(!styleEl){
+    styleEl = document.createElement("style");
+    styleEl.id = "printDynamicPage";
+    document.head.appendChild(styleEl);
+  }
+  document.body.classList.remove("printing-a4", "printing-slip-80", "printing-slip-58");
+  if(format === "slip-58" || (format === "slip" && shop.slipWidth === "58mm")){
+    document.body.classList.add("printing-slip-58");
+    styleEl.textContent = `@page { size: 58mm auto; margin: 0; }
+@media print {
+  #printArea { width: 50mm !important; margin: 0 auto !important; padding: 0 !important; }
+  .paper.paper-slip.slip-58mm { width: 50mm !important; max-width: 50mm !important; margin: 0 auto !important; padding: 2mm 0 10mm 0 !important; }
+}`;
+  } else if(format === "slip-80" || format === "slip"){
+    document.body.classList.add("printing-slip-80");
+    styleEl.textContent = `@page { size: 80mm auto; margin: 0; }
+@media print {
+  #printArea { width: 76mm !important; margin: 0 auto !important; padding: 0 !important; }
+  .paper.paper-slip.slip-80mm { width: 76mm !important; max-width: 76mm !important; margin: 0 auto !important; padding: 3mm 1mm 12mm 1mm !important; }
+}`;
+  } else {
+    document.body.classList.add("printing-a4");
+    styleEl.textContent = `@page { size: A4 portrait; margin: 8mm 6mm; }
+@media print {
+  #printArea { width: 100% !important; margin: 0 auto !important; }
+  .paper.paper-a4 { width: 100% !important; max-width: 760px !important; margin: 0 auto !important; padding: 6mm 4mm !important; }
+}`;
+  }
 }
 
-$("#vPrint").addEventListener("click", () => printDoc(viewing, "a4"));
-$("#vPrintSlip")?.addEventListener("click", () => printDoc(viewing, "slip"));
+function printDoc(d, format){
+  if(!d) return;
+  const targetFormat = format || viewingFormat || (shop.defaultPrint === "slip" ? (shop.slipWidth === "58mm" ? "slip-58" : "slip-80") : "a4");
+  setPrintPageStyle(targetFormat);
+  const printArea = $("#printArea");
+  if(printArea) printArea.innerHTML = paperHTML(d, targetFormat);
 
-$("#vSave").addEventListener("click",async()=>{
-  if(!downloads) return;
-  const css=document.getElementById("paperCss").textContent;
-  const html=`<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(viewing.no)}</title><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff}${css}</style></head><body>${paperHTML(viewing,"a4")}<script>window.onload=()=>setTimeout(()=>print(),400)<\/script></body></html>`;
-  try{ await downloads.save({filename:`${viewing.no} ${viewing.customer}.html`,data:html}); toast("บันทึกไฟล์แล้ว เปิดไฟล์เพื่อพิมพ์หรือส่งต่อ"); }
-  catch(e){ if(e&&e.code!=="declined") toast("บันทึกไฟล์ไม่สำเร็จ"); }
+  const cleanup = () => {
+    document.body.classList.remove("printing-a4", "printing-slip-80", "printing-slip-58");
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  setTimeout(cleanup, 8000);
+
+  setTimeout(() => {
+    try {
+      window.print();
+    } catch(e) {
+      toast("พิมพ์จากหน้านี้ไม่ได้ ใช้ปุ่มบันทึกไฟล์แทน");
+    }
+  }, 60);
+}
+
+document.querySelectorAll(".fmt-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    setViewingFormat(tab.dataset.fmt);
+  });
 });
-$("#vConvert").addEventListener("click",()=>{ const d=viewing; $("#dView").close(); openDoc(d); });
-$("#vDel").addEventListener("click",async()=>{
-  if(!viewing||!confirm(`ลบ ${DOCNAME[viewing.type]} ${viewing.no}?${viewing.cut?" (สต็อกที่ตัดไปแล้วจะไม่ถูกคืน)":""}`)) return;
-  try{ await store.del("docs/"+viewing.id); $("#dView").close(); toast("ลบเอกสารแล้ว"); }catch(e){ toast("ลบไม่สำเร็จ"); }
+
+$("#vPrintCurrent")?.addEventListener("click", () => {
+  if(viewing) printDoc(viewing, viewingFormat);
+});
+$("#vPrint")?.addEventListener("click", () => printDoc(viewing, "a4"));
+$("#vPrintSlip")?.addEventListener("click", () => printDoc(viewing, "slip-80"));
+$("#vPrintSlip58")?.addEventListener("click", () => printDoc(viewing, "slip-58"));
+
+$("#vSave").addEventListener("click", async () => {
+  if(!downloads) return;
+  const css = document.getElementById("paperCss").textContent;
+  const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(viewing.no)}</title><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff}${css}</style></head><body>${paperHTML(viewing, viewingFormat)}<script>window.onload=()=>setTimeout(()=>print(),400)<\/script></body></html>`;
+  try {
+    await downloads.save({filename: `${viewing.no} ${viewing.customer} (${viewingFormat}).html`, data: html});
+    toast("บันทึกไฟล์แล้ว เปิดไฟล์เพื่อพิมพ์หรือส่งต่อ");
+  } catch(e) {
+    if(e && e.code !== "declined") toast("บันทึกไฟล์ไม่สำเร็จ");
+  }
+});
+$("#vConvert").addEventListener("click", () => { const d = viewing; $("#dView").close(); openDoc(d); });
+$("#vDel").addEventListener("click", async () => {
+  if(!viewing || !confirm(`ลบ ${DOCNAME[viewing.type]} ${viewing.no}?${viewing.cut ? " (สต็อกที่ตัดไปแล้วจะไม่ถูกคืน)" : ""}`)) return;
+  try { await store.del("docs/" + viewing.id); $("#dView").close(); toast("ลบเอกสารแล้ว"); } catch(e){ toast("ลบไม่สำเร็จ"); }
 });
 
 /* ===================== Authentication, Roles & User Management ===================== */
@@ -2011,7 +2204,14 @@ function renderAlerts(){
 
 /* ===================== quick sale ===================== */
 let qcart=[];
-function openQuick(){ qcart=[]; $("#qsSearch").value=""; $("#qsCust").value=""; $("#qsGot").value=""; document.querySelector("[name=qsPay][value=เงินสด]").checked=true; drawQS(); $("#dQuick").showModal(); }
+function openQuick(){
+  qcart=[]; $("#qsSearch").value=""; $("#qsCust").value=""; $("#qsGot").value="";
+  document.querySelector("[name=qsPay][value=เงินสด]").checked=true;
+  const autoChk = $("#qsAutoPrintCheck");
+  if(autoChk) autoChk.checked = !!shop.autoPrintQuick;
+  drawQS();
+  $("#dQuick").showModal();
+}
 $("#qsOpen").addEventListener("click",openQuick);
 $("#docNew").addEventListener("click",()=>openDoc());
 function drawQS(){
@@ -2043,17 +2243,46 @@ $("#qsResults").addEventListener("click",e=>{
 $("#qsCart").addEventListener("input",e=>{ const r=e.target.closest("[data-i]"); if(!r) return; qcart[+r.dataset.i][e.target.dataset.k]=+e.target.value||0; qsTotals(); });
 $("#qsCart").addEventListener("click",e=>{ const r=e.target.dataset.rm; if(r!==undefined){ qcart.splice(+r,1); drawQS(); } });
 $("#qsClose").addEventListener("click",()=>$("#dQuick").close());
-$("#qsSave").addEventListener("click",async()=>{
+
+async function doQuickSale(forcePrint = false){
   const ls=qcart.filter(l=>l.qty>0); if(!ls.length) return toast("ยังไม่มีสินค้าในตะกร้า");
   const pay=document.querySelector("[name=qsPay]:checked").value, cust=$("#qsCust").value.trim();
   if(pay==="credit"&&!cust) return toast("ขายเชื่อต้องใส่ชื่อลูกค้า");
-  const btn=$("#qsSave"); btn.disabled=true;
+  const btn=$("#qsSave"), btnPrint=$("#qsSaveAndPrint");
+  btn.disabled=true; if(btnPrint) btnPrint.disabled=true;
   try{
-    const d=await commitDoc({type:pay==="credit"?"credit":"receipt",dateStr:today(),customer:cust||"ลูกค้าหน้าร้าน",lines:ls,discount:0,cut:true,showPhone:true,via:pay==="credit"?"":pay,dueDays:30});
-    $("#dQuick").close(); toast(`ขายแล้ว ${money(d.total)} บาท (${d.no})`); openView(d);
+    const tot=sumLines(ls);
+    const got=pay==="เงินสด" ? (+$("#qsGot").value||0) : 0;
+    const d=await commitDoc({
+      type: pay==="credit" ? "credit" : "receipt",
+      dateStr: today(),
+      customer: cust || "ลูกค้าหน้าร้าน",
+      lines: ls,
+      discount: 0,
+      cut: true,
+      showPhone: true,
+      via: pay==="credit" ? "" : pay,
+      dueDays: 30,
+      cashGot: got > 0 ? got : undefined,
+      cashChange: got > 0 ? Math.max(0, got - tot) : undefined
+    });
+    $("#dQuick").close();
+    toast(`ขายแล้ว ${money(d.total)} บาท (${d.no})`);
+    
+    const shouldPrint = forcePrint || $("#qsAutoPrintCheck")?.checked;
+    const fmt = shop.slipWidth === "58mm" ? "slip-58" : "slip-80";
+    if(shouldPrint){
+      openView(d, fmt);
+      printDoc(d, fmt);
+    } else {
+      openView(d);
+    }
   }catch(err){ toast(err&&err.message?err.message:"บันทึกไม่สำเร็จ"); }
-  finally{ btn.disabled=false; }
-});
+  finally{ btn.disabled=false; if(btnPrint) btnPrint.disabled=false; }
+}
+
+$("#qsSave").addEventListener("click", () => doQuickSale(false));
+$("#qsSaveAndPrint")?.addEventListener("click", () => doQuickSale(true));
 
 /* ===================== daily close ===================== */
 let closes=[], closeDate=null;
@@ -2465,9 +2694,12 @@ attachCustPicker($("#qsCust"),c=>{ $("#qsCust").value=c.name; toast(`ลูก�
 /* ---------- shop info ---------- */
 const fs=$("#fShop");
 function openShopModal(){
-  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote"]){
-    if(fs[k]) fs[k].value = shop[k] || "";
+  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote","slipWidth","defaultPrint"]){
+    if(fs[k]) fs[k].value = shop[k] || (k === "slipWidth" ? "80mm" : k === "defaultPrint" ? "slip" : "");
   }
+  if(fs.autoPrintQuick) fs.autoPrintQuick.checked = !!shop.autoPrintQuick;
+  if(fs.showPromptpaySlip) fs.showPromptpaySlip.checked = shop.showPromptpaySlip !== false;
+  if(fs.showBankSlip) fs.showBankSlip.checked = shop.showBankSlip !== false;
   $("#dShop").showModal();
 }
 $("#shopBtn").addEventListener("click",()=>{
@@ -2481,9 +2713,12 @@ fs.addEventListener("submit",async e=>{
   if(e.submitter&&e.submitter.value!=="save") return;
   e.preventDefault(); if(!fs.reportValidity()) return;
   const v={};
-  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote"]){
+  for(const k of ["name","phone","tax","addr","promptpay","bankName","bankAcc","bankHolder","billNote","slipWidth","defaultPrint"]){
     if(fs[k]) v[k]=fs[k].value.trim();
   }
+  v.autoPrintQuick = !!fs.autoPrintQuick?.checked;
+  v.showPromptpaySlip = !!fs.showPromptpaySlip?.checked;
+  v.showBankSlip = !!fs.showBankSlip?.checked;
   if(!v.ownerPin) v.ownerPin = "8888";
   if(!v.staffPin) v.staffPin = "1111";
   try{
@@ -2491,8 +2726,34 @@ fs.addEventListener("submit",async e=>{
     shop={...DEFAULT_SHOP,...v};
     $("#shopTitle").textContent = shop.name ? `คลังเหล็ก · ${shop.name}` : "คลังเหล็ก";
     $("#dShop").close();
-    toast("บันทึกข้อมูลร้านและการตั้งค่าแล้ว");
+    toast("บันทึกข้อมูลร้านและการตั้งค่าเครื่องพิมพ์แล้ว");
   }catch(err){ toast("บันทึกไม่สำเร็จ"); }
+});
+
+$("#btnTestPrintSlip")?.addEventListener("click", () => {
+  const chosenWidth = fs.slipWidth?.value || shop.slipWidth || "80mm";
+  const testDoc = {
+    id: "test-sample",
+    no: "TEST-" + new Date().toTimeString().slice(0, 8).replace(/:/g, ""),
+    type: "receipt",
+    at: Date.now(),
+    date: today(),
+    customer: "ลูกค้าทดสอบระบบพิมพ์ (คุณสมชาย)",
+    phone: "081-234-5678",
+    lines: [
+      { name: "เหล็กกล่อง 2x2 นิ้ว หนา 1.8mm (ตัวอย่าง)", qty: 2, unit: "เส้น", price: 320, cost: 260 },
+      { name: "แป๊ปกลมกัลวาไนซ์ 1 นิ้ว (ตัวอย่าง)", qty: 1, unit: "ท่อน", price: 185, cost: 150 },
+    ],
+    sub: 825,
+    discount: 25,
+    total: 800,
+    via: "เงินสด",
+    cashGot: 1000,
+    cashChange: 200,
+    note: "สลิปทดสอบการพิมพ์เครื่องพิมพ์ใบเสร็จ POS",
+    cut: false
+  };
+  printDoc(testDoc, chosenWidth === "58mm" ? "slip-58" : "slip-80");
 });
 
 /* ---------- Excel export ---------- */
