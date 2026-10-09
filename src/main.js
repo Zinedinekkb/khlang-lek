@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import qrcode from "qrcode-generator";
 import "./lib/claude-shim.js";
 import { assetUrl } from "./lib/claude-shim.js";
+import { itemCostPerKg } from "./lib/cost.js";
 import {
   initAuth,
   subscribeAuth,
@@ -1063,7 +1064,8 @@ function openProfit(fill){
     }catch(e){ if($("#pExtraKg")) $("#pExtraKg").value = ""; }
     if($("#pExtra")) $("#pExtra").value = 0;
     $("#pKg").value=+f.kg.value||"";
-    $("#pPpk").value="";
+    const ppk=itemCostPerKg(editing&&{...editing,cost:+f.cost.value||0,kg:+f.kg.value||0},buys);
+    $("#pPpk").value=ppk||"";
     $("#pPrice").value=+f.price.value||0;
     $("#pSellKg").value="";
     pLast="price";
