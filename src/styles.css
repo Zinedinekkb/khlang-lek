@@ -172,12 +172,26 @@ label input,label select,label textarea{padding:9px 10px;border:1px solid var(--
 .seg input:focus-visible + span{outline:3px solid var(--hazard);outline-offset:-3px}
 .photo{margin-top:10px}
 .photo img{display:block;max-width:100%;max-height:220px;margin:0 auto 8px;border-radius:6px;border:1px solid var(--line);cursor:zoom-in}
-.pline{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
-.pline .nm,.pline .st,.pline .sub{grid-column:1/-1}
-.pline input,.pline select{padding:7px 8px;border:1px solid var(--line);border-radius:5px;background:var(--panel);min-width:0;width:100%}
-.pline .stk{display:grid;grid-template-columns:2fr 1fr;gap:6px;grid-column:1/-1}
-.pline .rm{border:0;background:none;color:var(--low);font-size:1.2rem;padding:0 6px}
-.pline .sub{text-align:right;font-size:.85rem;color:var(--muted)}
+.pline{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.pline-top{display:flex;align-items:center;gap:8px;width:100%}
+.pline .nm{flex:1;min-width:0;font-size:1rem;font-weight:600}
+.pline .rm{flex:none;width:36px;height:36px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--low);font-size:1.15rem;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:all .15s}
+.pline .rm:hover,.pline .rm:active{background:color-mix(in srgb,var(--low) 15%,var(--panel));border-color:var(--low)}
+.pline-grid-3{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:8px;width:100%}
+.pline-field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.pline-lbl{font-size:.76rem;color:var(--muted);font-weight:500}
+.pline input,.pline select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-size:.95rem;min-width:0;width:100%;height:40px;box-sizing:border-box}
+.pline select{cursor:pointer}
+.pline .stk{display:grid;grid-template-columns:1.6fr 1fr;gap:8px;width:100%}
+.pline .sub{text-align:right;font-size:.86rem;color:var(--muted);padding-top:4px;border-top:1px dashed var(--line)}
+.pline .sub .num{font-weight:700;color:var(--ink);font-size:1.05rem}
+@media (max-width:400px){
+  .pline{padding:10px 8px;gap:7px}
+  .pline-grid-3{grid-template-columns:1fr 0.95fr 1.15fr;gap:6px}
+  .pline .stk{grid-template-columns:1.45fr 1fr;gap:6px}
+  .pline input,.pline select{padding:8px 6px;font-size:.9rem;height:38px}
+  .pline .rm{width:34px;height:34px}
+}
 .tag.new{background:var(--steel);color:var(--bg);border-color:var(--steel)}
 .pgrid{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:6px;background:var(--panel);margin-bottom:12px}
 .pgrid div{padding:10px 12px;border-top:1px solid var(--line)}
@@ -261,9 +275,7 @@ label input,label select{width:100%;min-width:0}
 .dim select{width:auto;flex:none}
 .bar .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62vw}
 .barin > div:first-child{min-width:0}
-.mode{flex:none}
-.pline,.line{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) auto}
-.pline .stk{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+.line{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) auto}
 .pline .stk > *{min-width:0}
 .seg label{position:relative;overflow:hidden}.seg input{left:0;top:0}
 .warn{border-color:var(--low) !important;box-shadow:0 0 0 1px var(--low);background:color-mix(in srgb,var(--low) 9%,var(--bg)) !important}

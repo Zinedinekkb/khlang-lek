@@ -505,28 +505,47 @@ function buyCatOptions(sel){
   return `<option value="">— ไม่เข้าสต็อก —</option>`+
     CATS.map(c=>`<option value="${esc(c)}" ${c===sel?"selected":""}>เข้าหมวด: ${esc(c)}</option>`).join("");
 }
+function unitOptions(sel){
+  const list=["เส้น","กก.","แผ่น","ท่อน","ชิ้น","ตัน"];
+  if(sel && !list.includes(sel)) list.push(sel);
+  return list.map(u=>`<option value="${esc(u)}" ${u===sel?"selected":""}>${esc(u)}</option>`).join("");
+}
 function drawBLines(){
   const locked=!!editingBuy;
-  const stockNames=[...new Set(items.flatMap(it=>{
-    const n=String(it.name||"").trim(), s=String(it.spec||"").trim();
-    return s?[n,`${n} ${s}`]:[n];
-  }).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"th"));
-
   $("#bLines").innerHTML=blines.map((l,i)=>`
     <div class="pline" data-i="${i}">
-      <input class="nm${wc(l,"desc")}" data-k="desc" list="stockItemNames" value="${esc(l.desc)}" placeholder="รายการ เช่น แท่งเหล็ก / เหล็กกล่อง 2x4 หนา 2.3" maxlength="100">
-      <input class="${wc(l,"qty")}" data-k="qty" type="number" inputmode="decimal" min="0" step="any" value="${l.qty||""}" placeholder="จำนวน" aria-label="จำนวน">
-      <input class="${wc(l,"unit")}" data-k="unit" list="unitList" value="${esc(l.unit)}" placeholder="หน่วย" maxlength="10">
-      <input class="${wc(l,"price")}" data-k="price" type="number" inputmode="decimal" min="0" step="any" value="${l.price||""}" placeholder="ราคา/หน่วย" aria-label="ราคาต่อหน่วย">
-      <button type="button" class="rm" data-rm="${i}" aria-label="ลบรายการ" ${locked?"hidden":""}>×</button>
+      <div class="pline-top">
+        <input class="nm${wc(l,"desc")}" data-k="desc" value="${esc(l.desc)}" placeholder="ชื่อสินค้า เช่น ไอเทม1 / แท่งเหล็ก" maxlength="100">
+        <button type="button" class="rm" data-rm="${i}" aria-label="ลบรายการ" title="ลบรายการ" ${locked?"hidden":""}>✕</button>
+      </div>
+      <div class="pline-grid-3">
+        <label class="pline-field">
+          <span class="pline-lbl">จำนวน</span>
+          <input class="${wc(l,"qty")}" data-k="qty" type="number" inputmode="decimal" min="0" step="any" value="${l.qty||""}" placeholder="0" aria-label="จำนวน">
+        </label>
+        <label class="pline-field">
+          <span class="pline-lbl">หน่วย</span>
+          <select class="${wc(l,"unit")}" data-k="unit" aria-label="หน่วย">
+            ${unitOptions(l.unit)}
+          </select>
+        </label>
+        <label class="pline-field">
+          <span class="pline-lbl">ราคา/หน่วย</span>
+          <input class="${wc(l,"price")}" data-k="price" type="number" inputmode="decimal" min="0" step="any" value="${l.price||""}" placeholder="0.00" aria-label="ราคาต่อหน่วย">
+        </label>
+      </div>
       <div class="stk">
-        <select data-k="cat" ${locked?"disabled":""} aria-label="หมวดหมู่สินค้าในสต็อก">${buyCatOptions(l.cat)}</select>
-        <input data-k="addQty" type="number" inputmode="decimal" min="0" step="any" value="${l.addQty||""}" placeholder="${l.cat?'จำนวนเข้าสต็อก':'ไม่เข้าสต็อก'}" ${locked||!l.cat?"disabled":""} aria-label="จำนวนเข้าสต็อก">
+        <label class="pline-field stk-cat">
+          <span class="pline-lbl">เข้าสต็อกสินค้า</span>
+          <select data-k="cat" ${locked?"disabled":""} aria-label="หมวดหมู่สินค้าในสต็อก">${buyCatOptions(l.cat)}</select>
+        </label>
+        <label class="pline-field stk-qty">
+          <span class="pline-lbl">จำนวนเข้าสต็อก</span>
+          <input data-k="addQty" type="number" inputmode="decimal" min="0" step="any" value="${l.addQty||""}" placeholder="${l.cat?'จำนวนเข้าสต็อก':'ไม่เข้าสต็อก'}" ${locked||!l.cat?"disabled":""} aria-label="จำนวนเข้าสต็อก">
+        </label>
       </div>
       <div class="sub">รวม <span class="num">${money((+l.qty||0)*(+l.price||0))}</span> บาท</div>
-    </div>`).join("")+
-    `<datalist id="unitList">${UNITS.map(u=>`<option>${u}</option>`).join("")}</datalist>`+
-    `<datalist id="stockItemNames">${stockNames.map(n=>`<option value="${esc(n)}"></option>`).join("")}</datalist>`;
+    </div>`).join("");
   buyTotal();
 }
 const bSum=()=>blines.reduce((s,l)=>s+(+l.qty||0)*(+l.price||0),0);
@@ -534,31 +553,6 @@ function buyTotal(){ $("#bTotal").textContent=money(bSum()); }
 $("#bLines").addEventListener("input",e=>{
   const row=e.target.closest("[data-i]"); if(!row) return; const l=blines[+row.dataset.i], k=e.target.dataset.k; if(!k) return;
   l[k]=["qty","price","addQty"].includes(k)?(+e.target.value||0):e.target.value; if(l._w) delete l._w[k];
-
-  if(k==="desc"){
-    const raw=String(l.desc||"").trim().toLowerCase();
-    const existing=items.find(x=>{
-      const n=String(x.name||"").trim().toLowerCase();
-      const full=`${n} ${String(x.spec||"").trim().toLowerCase()}`.trim();
-      return n===raw || full===raw;
-    });
-    if(existing){
-      if(!l.cat && existing.cat){
-        l.cat=existing.cat;
-        const sel=row.querySelector("[data-k=cat]"); if(sel) sel.value=l.cat;
-        const addInp=row.querySelector("[data-k=addQty]");
-        if(addInp){
-          addInp.disabled=false;
-          addInp.placeholder="จำนวนเข้าสต็อก";
-          if(!l.addQty && l.qty){ l.addQty=l.qty; l._syncQty=true; addInp.value=l.addQty||""; }
-        }
-      }
-      if(existing.unit && (!l.unit || l.unit==="กก." || l.unit==="เส้น")){
-        l.unit=existing.unit;
-        const uInp=row.querySelector("[data-k=unit]"); if(uInp) uInp.value=l.unit;
-      }
-    }
-  }
 
   if(k==="qty"){
     if(l.cat && (l._syncQty!==false || !l.addQty)){
@@ -576,6 +570,9 @@ $("#bLines").addEventListener("input",e=>{
 
 $("#bLines").addEventListener("change",e=>{
   const row=e.target.closest("[data-i]"); if(!row) return; const l=blines[+row.dataset.i], k=e.target.dataset.k; if(!k) return;
+  if(k==="unit"){
+    l.unit=e.target.value;
+  }
   if(k==="cat"){
     l.cat=e.target.value;
     const addInp=row.querySelector("[data-k=addQty]");
@@ -591,7 +588,17 @@ $("#bLines").addEventListener("change",e=>{
     }
   }
 });
-$("#bLines").addEventListener("click",e=>{ const r=e.target.dataset.rm; if(r!==undefined){ blines.splice(+r,1); if(!blines.length) blines.push(blankBLine()); drawBLines(); } });
+$("#bLines").addEventListener("click",e=>{
+  const btn=e.target.closest("[data-rm]");
+  if(btn){
+    const r=btn.dataset.rm;
+    if(r!==undefined){
+      blines.splice(+r,1);
+      if(!blines.length) blines.push(blankBLine());
+      drawBLines();
+    }
+  }
+});
 $("#bAdd").addEventListener("click",()=>{ blines.push(blankBLine()); drawBLines(); });
 $("#bPick").addEventListener("click",()=>$("#bFile").click());
 $("#bImg").addEventListener("click",()=>{ $("#iBig").src=$("#bImg").src; $("#dImg").showModal(); });
