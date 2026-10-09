@@ -455,14 +455,16 @@
   <div class="grid" style="margin-top:12px">
     <label>ทุนซื้อต่อ กก. (ถ้าซื้อเป็นกิโล)<input id="pPpk" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
     <label>น้ำหนักต่อหน่วย (กก.)<input id="pKg" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
-    <label>ต้นทุน/หน่วย (บาท)<input id="pCost" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
-    <label>ค่าใช้จ่ายอื่น/หน่วย<input id="pExtra" type="number" inputmode="decimal" min="0" step="any" value="0" placeholder="ขนส่ง ค่าตัด"></label>
+    <label>ต้นทุนสินค้า/หน่วย (บาท)<input id="pCost" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+    <label>ค่าใช้จ่ายอื่นต่อ กก. (บาท)<input id="pExtraKg" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="0"><input id="pExtra" type="hidden" value="0"><small class="hint" id="pExtraHint" style="margin-top:2px;font-size:.76rem;color:var(--muted)">= 0.00 บาท/หน่วย</small></label>
     <label>ราคาขายต่อ กก. (บาท)<input id="pSellKg" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
     <label>ราคาขาย/หน่วย (บาท)<input id="pPrice" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
     <label class="full">จำนวนที่จะขาย<input id="pN" type="number" inputmode="decimal" min="0" step="any" value="1"></label>
   </div>
-  <p class="hint" id="pHint">ใส่ราคาขายต่อ กก. ระบบคูณน้ำหนักเป็นราคาต่อหน่วยให้ หรือใส่ราคาต่อหน่วย ระบบบอกราคาต่อ กก. ให้</p>
+  <p class="hint" id="pHint">ใส่ราคาและค่าใช้จ่ายต่อ กก. ระบบคูณน้ำหนักเป็นราคาต่อหน่วยให้อัตโนมัติ หรือใส่ราคาต่อหน่วย ระบบบอกราคาต่อ กก. ให้</p>
   <div class="result">
+    <div id="pBaseRow"><span>ต้นทุนสินค้า</span><span><span class="num" id="pBaseCostTxt">0</span> บาท</span></div>
+    <div id="pExtraResultRow" hidden><span>ค่าใช้จ่ายอื่น (ต่อ กก. × น้ำหนัก)</span><span><span class="num" id="pExtraResultTxt">0</span> บาท</span></div>
     <div><span>ทุนรวม/หน่วย</span><span><span class="num" id="pTc">0</span> บาท</span></div>
     <div><span>ทุนต่อ กก.</span><span><span class="num" id="pTk">0</span> บาท</span></div>
     <div><span>กำไร/หน่วย</span><span><span class="num" id="pPu">0</span> บาท</span></div>

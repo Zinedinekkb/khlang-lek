@@ -923,13 +923,36 @@ $("#bDel").addEventListener("click",async()=>{
 let pLast="kg", pFill=false;
 function pCalc(){
   const ppk=+$("#pPpk").value||0, kg=+$("#pKg").value||0;
-  if(ppk>0&&kg>0&&document.activeElement&&["pPpk","pKg"].includes(document.activeElement.id)) $("#pCost").value=Math.round(ppk*kg*100)/100;
-  const tc=(+$("#pCost").value||0)+(+$("#pExtra").value||0);
+  if(ppk>0&&kg>0&&document.activeElement&&["pPpk","pKg"].includes(document.activeElement.id)){
+    $("#pCost").value=Math.round(ppk*kg*100)/100;
+  }
+  const extraKg = +$("#pExtraKg")?.value || 0;
+  try{
+    if(extraKg > 0) localStorage.setItem("steel-extra-kg", String(extraKg));
+  }catch(e){}
+
+  const extraPerUnit = kg > 0 ? Math.round(extraKg * kg * 100) / 100 : extraKg;
+  if($("#pExtra")) $("#pExtra").value = extraPerUnit;
+
+  const hintEl = $("#pExtraHint");
+  if(hintEl){
+    if(extraKg > 0){
+      hintEl.innerHTML = kg > 0 
+        ? `= <b>${money(extraPerUnit)}</b> บาท/หน่วย <small>(${fmt(extraKg)} บ./กก. × ${fmt(kg)} กก.)</small>`
+        : `<b class="neg">ใส่น้ำหนักต่อหน่วย (กก.) ก่อน</b>`;
+    } else {
+      hintEl.textContent = "= 0.00 บาท/หน่วย";
+    }
+  }
+
+  const cost = +$("#pCost").value || 0;
+  const tc = cost + extraPerUnit;
+
   if(kg>0){
     if(pLast==="kg"){ const sk=+$("#pSellKg").value||0; if(sk) $("#pPrice").value=Math.round(sk*kg*100)/100; }
     else { const pr=+$("#pPrice").value||0; $("#pSellKg").value= pr ? Math.round(pr/kg*100)/100 : ""; }
   }
-  $("#pHint").innerHTML = kg>0 ? "ใส่ราคาขายต่อ กก. ระบบคูณน้ำหนักเป็นราคาต่อหน่วยให้ หรือใส่ราคาต่อหน่วย ระบบบอกราคาต่อ กก. ให้"
+  $("#pHint").innerHTML = kg>0 ? "ใส่ราคาและค่าใช้จ่ายต่อ กก. ระบบคูณน้ำหนักเป็นราคาต่อหน่วยให้อัตโนมัติ หรือใส่ราคาต่อหน่วย ระบบบอกราคาต่อ กก. ให้"
     : '<b class="neg">ใส่ "น้ำหนักต่อหน่วย" ก่อน</b> ราคาต่อ กก. จึงจะคิดเป็นราคาต่อหน่วยได้';
   const price=+$("#pPrice").value||0, pu=price-tc, n=+$("#pN").value||0;
   $("#pTc").textContent=money(tc); $("#pTk").textContent= kg ? money(tc/kg) : "—";
@@ -937,20 +960,54 @@ function pCalc(){
   $("#pPk").textContent= kg ? money(pu/kg) : "—"; $("#pPk").className="num "+(pu<0?"neg":"pos");
   $("#pMg").textContent= price ? fmt(Math.round(pu/price*1000)/10) : "0";
   $("#pAll").textContent=money(pu*n); $("#pAll").className="num "+(pu<0?"neg":"pos");
+
+  const extraRow = $("#pExtraResultRow");
+  if(extraRow){
+    extraRow.hidden = !(extraPerUnit > 0);
+    const extraTxt = $("#pExtraResultTxt");
+    if(extraTxt) extraTxt.textContent = money(extraPerUnit);
+  }
+  const baseCostTxt = $("#pBaseCostTxt");
+  if(baseCostTxt){
+    baseCostTxt.textContent = money(cost);
+  }
 }
-$("#dProfit").addEventListener("input",e=>{ if(e.target.id==="pSellKg") pLast="kg"; if(e.target.id==="pPrice") pLast="price"; pCalc(); });
+$("#dProfit").addEventListener("input",e=>{
+  if(e.target.id==="pSellKg") pLast="kg";
+  if(e.target.id==="pPrice") pLast="price";
+  pCalc();
+});
 function openProfit(fill){
   pFill=fill; $("#pUse").hidden=!fill;
-  if(fill){ $("#pCost").value=+f.cost.value||0; $("#pExtra").value=0; $("#pKg").value=+f.kg.value||""; $("#pPpk").value="";
-    $("#pPrice").value=+f.price.value||0; $("#pSellKg").value=""; pLast="price"; }
-  pCalc(); $("#dProfit").showModal();
+  if(fill){
+    $("#pCost").value=+f.cost.value||0;
+    try{
+      const saved = localStorage.getItem("steel-extra-kg");
+      if(saved && $("#pExtraKg")) $("#pExtraKg").value = saved;
+      else if($("#pExtraKg")) $("#pExtraKg").value = "";
+    }catch(e){ if($("#pExtraKg")) $("#pExtraKg").value = ""; }
+    if($("#pExtra")) $("#pExtra").value = 0;
+    $("#pKg").value=+f.kg.value||"";
+    $("#pPpk").value="";
+    $("#pPrice").value=+f.price.value||0;
+    $("#pSellKg").value="";
+    pLast="price";
+  }
+  pCalc();
+  $("#dProfit").showModal();
 }
 $("#profitBtn").addEventListener("click",()=>openProfit(false));
 $("#eProfit").addEventListener("click",()=>openProfit(true));
 $("#pClose").addEventListener("click",()=>$("#dProfit").close());
 $("#pUse").addEventListener("click",()=>{
-  f.cost.value=Math.round(((+$("#pCost").value||0)+(+$("#pExtra").value||0))*100)/100; f.price.value=+$("#pPrice").value||0;
-  editMargin(); $("#dProfit").close();
+  const kg = +$("#pKg").value || 0;
+  const extraKg = +$("#pExtraKg")?.value || 0;
+  const extraPerUnit = kg > 0 ? Math.round(extraKg * kg * 100) / 100 : extraKg;
+  const tc = (+$("#pCost").value || 0) + extraPerUnit;
+  f.cost.value = Math.round(tc * 100) / 100;
+  f.price.value = +$("#pPrice").value || 0;
+  editMargin();
+  $("#dProfit").close();
 });
 function editMargin(){
   const c=+f.cost.value||0, p=+f.price.value||0;
