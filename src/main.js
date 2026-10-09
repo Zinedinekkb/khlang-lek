@@ -354,6 +354,29 @@ function openEdit(item){
   for(const k of ["name","cat","cond","spec","qty","unit","kg","min","cost","price","loc"]) f[k].value=d[k]??"";
   f.lenFull.value=d.lenFull||""; f.sheetW.value=d.sheetW||""; f.sheetL.value=d.sheetL||""; editCutRows();
   editMargin();
+
+  const kgHint=$("#eKgHint");
+  if(kgHint) kgHint.hidden=true;
+  if(item && (!item.kg || +item.kg===0)){
+    const bMatch=(buys||[]).flatMap(b=>b.lines||[]).reverse().find(l=>{
+      const matchName=(l.itemId&&l.itemId===item.id)||(String(l.desc||"").trim().toLowerCase()===String(item.name||"").trim().toLowerCase());
+      const hasKg=(l.kgPer>0)||((l.unit==="กก."||l.unit==="ตัน")&&+l.qty>0&&+l.addQty>0);
+      return matchName&&hasKg;
+    });
+    if(bMatch){
+      const totKg=bMatch.unit==="ตัน"?+bMatch.qty*1000:+bMatch.qty;
+      const calcKg=bMatch.kgPer||(bMatch.addQty>0?Math.round((totKg/bMatch.addQty)*1000)/1000:0);
+      if(calcKg>0){
+        f.kg.value=calcKg;
+        if(f.unit.value==="กก.") f.unit.value=bMatch.stkUnit||(item.cat==="เหล็กแผ่น"?"แผ่น":"เส้น");
+        if(kgHint){
+          kgHint.textContent=`💡 คำนวณอัตโนมัติจากบิลซื้อ: ${fmt(totKg)} กก. ÷ ${fmt(bMatch.addQty)} ${f.unit.value} = ${fmt(calcKg)} กก./${f.unit.value}`;
+          kgHint.hidden=false;
+        }
+      }
+    }
+  }
+
   $("#dEdit").showModal();
 }
 f.addEventListener("submit",async e=>{
@@ -479,11 +502,12 @@ function legacyLines(b){
       const it = items.find(i=>i.id===l.itemId);
       if(it) c = it.cat || "";
     }
-    return {...l, cat: c};
+    const defUnit = l.stkUnit || (c==="เหล็กแผ่น"?"แผ่น":"เส้น");
+    return {...l, cat: c, stkUnit: defUnit};
   });
-  return [{desc:b.desc||"",qty:+b.kg||0,unit:"กก.",price:+b.ppk||0,itemId:b.itemId||"",addQty:+b.addQty||0,cat:""}];
+  return [{desc:b.desc||"",qty:+b.kg||0,unit:"กก.",price:+b.ppk||0,itemId:b.itemId||"",addQty:+b.addQty||0,stkUnit:"เส้น",cat:""}];
 }
-const blankBLine=(k)=>({desc:"",qty:0,unit:(k||fb?.querySelector?.("[name=kind]:checked")?.value)==="new"?"เส้น":"กก.",price:0,itemId:"",addQty:0,cat:""});
+const blankBLine=(k)=>({desc:"",qty:0,unit:(k||fb?.querySelector?.("[name=kind]:checked")?.value)==="new"?"เส้น":"กก.",price:0,itemId:"",addQty:0,stkUnit:"เส้น",cat:""});
 function openBuy(b){
   editingBuy=b||null; pendingPhotos.forEach(p=>URL.revokeObjectURL(p.url)); pendingPhotos=[]; drawThumbs();
   $("#bTitle").textContent=b?"รายการซื้อเข้า":"บันทึกการซื้อเข้า"; $("#bDel").hidden=!b;
@@ -510,12 +534,44 @@ function unitOptions(sel){
   if(sel && !list.includes(sel)) list.push(sel);
   return list.map(u=>`<option value="${esc(u)}" ${u===sel?"selected":""}>${esc(u)}</option>`).join("");
 }
+function rowCalcKgPer(l){
+  const totalKg = l.unit==="ตัน" ? (+l.qty*1000) : (l.unit==="กก." ? +l.qty : 0);
+  return (totalKg>0 && +l.addQty>0) ? Math.round((totalKg/+l.addQty)*100)/100 : 0;
+}
+function rowCalcCostPer(l){
+  return (+l.addQty>0) ? Math.round(((+l.qty*+l.price)/+l.addQty)*100)/100 : 0;
+}
+function updateRowCalcHint(row, l){
+  let hint = row.querySelector(".stk-calc-hint");
+  const defStkUnit = l.stkUnit || (l.cat==="เหล็กแผ่น"?"แผ่น":"เส้น");
+  const totalKg = l.unit==="ตัน" ? (+l.qty*1000) : (l.unit==="กก." ? +l.qty : 0);
+  const calcKgPer = rowCalcKgPer(l);
+  const calcCostPer = rowCalcCostPer(l);
+
+  if(l.cat && calcKgPer>0){
+    const html = `💡 คำนวณน้ำหนัก: <b>${fmt(calcKgPer)} กก./${esc(defStkUnit)}</b> (${fmt(totalKg)} กก. ÷ ${fmt(l.addQty)} ${esc(defStkUnit)})${calcCostPer>0?` · ทุน <b>${money(calcCostPer)}</b> ฿/${esc(defStkUnit)}`:''}`;
+    if(!hint){
+      hint = document.createElement("div");
+      hint.className = "stk-calc-hint";
+      const sub = row.querySelector(".sub");
+      row.insertBefore(hint, sub);
+    }
+    hint.innerHTML = html;
+  } else if(hint){
+    hint.remove();
+  }
+}
 function drawBLines(){
   const locked=!!editingBuy;
-  $("#bLines").innerHTML=blines.map((l,i)=>`
+  $("#bLines").innerHTML=blines.map((l,i)=>{
+    const defStkUnit = l.stkUnit || (l.cat==="เหล็กแผ่น"?"แผ่น":"เส้น");
+    const totalKg = l.unit==="ตัน" ? (+l.qty*1000) : (l.unit==="กก." ? +l.qty : 0);
+    const calcKgPer = rowCalcKgPer(l);
+    const calcCostPer = rowCalcCostPer(l);
+    return `
     <div class="pline" data-i="${i}">
       <div class="pline-top">
-        <input class="nm${wc(l,"desc")}" data-k="desc" value="${esc(l.desc)}" placeholder="ชื่อสินค้า เช่น ไอเทม1 / แท่งเหล็ก" maxlength="100">
+        <input class="nm${wc(l,"desc")}" data-k="desc" value="${esc(l.desc)}" placeholder="ชื่อสินค้า เช่น ไอเทม1 / เสาเหล็ก" maxlength="100">
         <button type="button" class="rm" data-rm="${i}" aria-label="ลบรายการ" title="ลบรายการ" ${locked?"hidden":""}>✕</button>
       </div>
       <div class="pline-grid-3">
@@ -541,11 +597,18 @@ function drawBLines(){
         </label>
         <label class="pline-field stk-qty">
           <span class="pline-lbl">จำนวนเข้าสต็อก</span>
-          <input data-k="addQty" type="number" inputmode="decimal" min="0" step="any" value="${l.addQty||""}" placeholder="${l.cat?'เช่น 50 แท่ง':'ไม่เข้าสต็อก'}" ${locked||!l.cat?"disabled":""} aria-label="จำนวนเข้าสต็อก">
+          <div class="stk-count-wrap">
+            <input data-k="addQty" type="number" inputmode="decimal" min="0" step="any" value="${l.addQty||""}" placeholder="${l.cat?'เช่น 20':'ไม่เข้าสต็อก'}" ${locked||!l.cat?"disabled":""} aria-label="จำนวนเข้าสต็อก">
+            <select data-k="stkUnit" ${locked||!l.cat?"disabled":""} aria-label="หน่วยนับในสต็อก">
+              ${unitOptions(defStkUnit)}
+            </select>
+          </div>
         </label>
       </div>
+      ${l.cat && calcKgPer>0 ? `<div class="stk-calc-hint">💡 คำนวณน้ำหนัก: <b>${fmt(calcKgPer)} กก./${esc(defStkUnit)}</b> (${fmt(totalKg)} กก. ÷ ${fmt(l.addQty)} ${esc(defStkUnit)})${calcCostPer>0?` · ทุน <b>${money(calcCostPer)}</b> ฿/${esc(defStkUnit)}`:''}</div>` : ''}
       <div class="sub">รวม <span class="num">${money((+l.qty||0)*(+l.price||0))}</span> บาท</div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   buyTotal();
 }
 const bSum=()=>blines.reduce((s,l)=>s+(+l.qty||0)*(+l.price||0),0);
@@ -553,7 +616,7 @@ function buyTotal(){ $("#bTotal").textContent=money(bSum()); }
 $("#bLines").addEventListener("input",e=>{
   const row=e.target.closest("[data-i]"); if(!row) return; const l=blines[+row.dataset.i], k=e.target.dataset.k; if(!k) return;
   l[k]=["qty","price","addQty"].includes(k)?(+e.target.value||0):e.target.value; if(l._w) delete l._w[k];
-
+  updateRowCalcHint(row, l);
   row.querySelector(".sub .num").textContent=money((+l.qty||0)*(+l.price||0)); buyTotal();
 });
 
@@ -561,19 +624,26 @@ $("#bLines").addEventListener("change",e=>{
   const row=e.target.closest("[data-i]"); if(!row) return; const l=blines[+row.dataset.i], k=e.target.dataset.k; if(!k) return;
   if(k==="unit"){
     l.unit=e.target.value;
+    updateRowCalcHint(row, l);
+  }
+  if(k==="stkUnit"){
+    l.stkUnit=e.target.value;
+    updateRowCalcHint(row, l);
   }
   if(k==="cat"){
     l.cat=e.target.value;
     const addInp=row.querySelector("[data-k=addQty]");
+    const unitSel=row.querySelector("[data-k=stkUnit]");
     if(l.cat){
-      if(addInp){
-        addInp.disabled=false;
-        addInp.placeholder="เช่น 50 แท่ง";
-      }
+      if(!l.stkUnit) l.stkUnit = l.cat==="เหล็กแผ่น"?"แผ่น":"เส้น";
+      if(addInp){ addInp.disabled=false; addInp.placeholder="เช่น 20"; }
+      if(unitSel){ unitSel.disabled=false; unitSel.value=l.stkUnit; }
     } else {
       l.addQty=0;
       if(addInp){ addInp.value=""; addInp.placeholder="ไม่เข้าสต็อก"; addInp.disabled=true; }
+      if(unitSel){ unitSel.disabled=true; }
     }
+    updateRowCalcHint(row, l);
   }
 });
 $("#bLines").addEventListener("click",e=>{
@@ -819,10 +889,16 @@ fb.addEventListener("submit",async e=>{
   if(!fb.seller.value.trim()){ warnInput(fb.seller,"ใส่ชื่อผู้ขาย"); fb.seller.focus(); return; }
   if(!fb.date.value) fb.date.value=today();
   const nW=fb.querySelectorAll(".warn").length; if(nW&&!confirm(`ยังมี ${nW} ช่องสีแดงที่ยังไม่ได้ตรวจ บันทึกเลยไหม?`)) return;
-  const ls=blines.filter(l=>String(l.desc).trim()&&(+l.qty||0)>0).map(l=>({
-    desc:String(l.desc).trim(),qty:+l.qty,unit:l.unit||"",price:+l.price||0,
-    cat:l.cat||"",itemId:l.itemId||"",addQty:l.cat?(+l.addQty||0):0,...(l.grade?{grade:l.grade}:{})
-  }));
+  const ls=blines.filter(l=>String(l.desc).trim()&&(+l.qty||0)>0).map(l=>{
+    const totalKg = l.unit==="ตัน" ? (+l.qty*1000) : (l.unit==="กก." ? +l.qty : 0);
+    const stkUnit = l.stkUnit || (l.cat==="เหล็กแผ่น"?"แผ่น":"เส้น");
+    const kgPer = (+l.addQty>0 && totalKg>0) ? Math.round((totalKg/+l.addQty)*1000)/1000 : 0;
+    return {
+      desc:String(l.desc).trim(),qty:+l.qty,unit:l.unit||"",price:+l.price||0,
+      cat:l.cat||"",itemId:l.itemId||"",addQty:l.cat?(+l.addQty||0):0,
+      stkUnit,kgPer,...(l.grade?{grade:l.grade}:{})
+    };
+  });
   if(!ls.length) return toast("ใส่รายการอย่างน้อย 1 รายการ (ชื่อ + จำนวน)");
   const saveBtn=$("#bSave"); saveBtn.disabled=true;
   const kind=fb.querySelector("[name=kind]:checked").value, total=Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0)*100)/100;
@@ -864,15 +940,26 @@ fb.addEventListener("submit",async e=>{
                  return n===descTrim || full===descTrim;
                });
 
+        const lineTotal=l.qty*l.price;
+        const targetUnit = l.stkUnit || (l.cat==="เหล็กแผ่น"?"แผ่น":"เส้น");
+        const calcKg = l.kgPer || 0;
+
         if(it){
-          const oq=+it.qty||0, oc=+it.cost||0, nq=oq+l.addQty, lineTotal=l.qty*l.price;
+          const oq=+it.qty||0, oc=+it.cost||0, nq=oq+l.addQty;
           const newCost=Math.round((oq>0&&oc>0 ? (oq*oc+lineTotal)/nq : (l.addQty>0 ? lineTotal/l.addQty : oc))*100)/100;
-          it.qty=nq; it.cost=newCost; if(l.cat) it.cat=l.cat; local[it.id]=it; l.itemId=it.id;
-          await store.update("items/"+it.id,{qty:nq,cost:newCost,cat:it.cat,updatedAt:Date.now()});
+          it.qty=nq; it.cost=newCost; if(l.cat) it.cat=l.cat;
+          const updates={qty:nq,cost:newCost,cat:it.cat,updatedAt:Date.now()};
+          if(l.addQty>0 && it.unit==="กก." && targetUnit!=="กก."){
+            it.unit=targetUnit; updates.unit=targetUnit;
+          }
+          if(calcKg>0 && (!it.kg || +it.kg===0)){
+            it.kg=calcKg; updates.kg=calcKg;
+          }
+          local[it.id]=it; l.itemId=it.id;
+          await store.update("items/"+it.id,updates);
           await addMove({type:"in",qty:l.addQty,itemId:it.id,name:it.name,note:`${kind==="used"?"รับซื้อเก่า":"ซื้อใหม่"}จาก ${v.seller}${v.billNo?" บิล "+v.billNo:""}`,at:v.at});
         }else{
           const newId=uid();
-          const lineTotal=l.qty*l.price;
           const cost=l.addQty>0 ? Math.round((lineTotal/l.addQty)*100)/100 : (l.price||0);
           const newItem={
             id:newId,
@@ -881,8 +968,8 @@ fb.addEventListener("submit",async e=>{
             cond:kind==="used"?"used":"new",
             spec:"",
             qty:l.addQty,
-            unit:l.unit||(kind==="new"?"เส้น":"กก."),
-            kg:0,
+            unit:targetUnit,
+            kg:calcKg,
             min:0,
             cost:cost,
             price:0,

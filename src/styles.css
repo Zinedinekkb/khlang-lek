@@ -182,13 +182,19 @@ label input,label select,label textarea{padding:9px 10px;border:1px solid var(--
 .pline-lbl{font-size:.76rem;color:var(--muted);font-weight:500}
 .pline input,.pline select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-size:.95rem;min-width:0;width:100%;height:40px;box-sizing:border-box}
 .pline select{cursor:pointer}
-.pline .stk{display:grid;grid-template-columns:1.6fr 1fr;gap:8px;width:100%}
+.pline .stk{display:grid;grid-template-columns:1.2fr 1.3fr;gap:8px;width:100%}
+.stk-count-wrap{display:flex;gap:4px;width:100%}
+.stk-count-wrap input{flex:1.2;min-width:0}
+.stk-count-wrap select{flex:1;min-width:68px;max-width:88px;padding:8px 6px}
+.stk-calc-hint{font-size:.8rem;color:var(--steel);background:color-mix(in srgb,var(--steel) 10%,var(--panel));border:1px dashed color-mix(in srgb,var(--steel) 35%,transparent);border-radius:6px;padding:6px 10px;line-height:1.35}
 .pline .sub{text-align:right;font-size:.86rem;color:var(--muted);padding-top:4px;border-top:1px dashed var(--line)}
 .pline .sub .num{font-weight:700;color:var(--ink);font-size:1.05rem}
 @media (max-width:400px){
   .pline{padding:10px 8px;gap:7px}
   .pline-grid-3{grid-template-columns:1fr 0.95fr 1.15fr;gap:6px}
-  .pline .stk{grid-template-columns:1.45fr 1fr;gap:6px}
+  .pline .stk{grid-template-columns:1.15fr 1.35fr;gap:6px}
+  .stk-count-wrap select{min-width:58px;max-width:76px;padding:8px 3px;font-size:.84rem}
+  .stk-calc-hint{font-size:.76rem;padding:5px 8px}
   .pline input,.pline select{padding:8px 6px;font-size:.9rem;height:38px}
   .pline .rm{width:34px;height:34px}
 }
