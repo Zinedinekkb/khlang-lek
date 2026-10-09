@@ -473,17 +473,24 @@ const UNC_SPEC=`"uncertain": array of field paths you read but are NOT confident
 const fb=$("#fBuy"); let editingBuy=null, blines=[];
 const UNITS=["กก.","เส้น","แผ่น","ท่อน","ชิ้น","ตัน"];
 function legacyLines(b){
-  if(Array.isArray(b.lines)) return b.lines.map(l=>({...l}));
-  return [{desc:b.desc||"",qty:+b.kg||0,unit:"กก.",price:+b.ppk||0,itemId:b.itemId||"",addQty:+b.addQty||0}];
+  if(Array.isArray(b.lines)) return b.lines.map(l=>{
+    let c = l.cat || "";
+    if(!c && l.itemId){
+      const it = items.find(i=>i.id===l.itemId);
+      if(it) c = it.cat || "";
+    }
+    return {...l, cat: c};
+  });
+  return [{desc:b.desc||"",qty:+b.kg||0,unit:"กก.",price:+b.ppk||0,itemId:b.itemId||"",addQty:+b.addQty||0,cat:""}];
 }
-const blankBLine=()=>({desc:"",qty:0,unit:"กก.",price:0,itemId:"",addQty:0});
+const blankBLine=(k)=>({desc:"",qty:0,unit:(k||fb?.querySelector?.("[name=kind]:checked")?.value)==="new"?"เส้น":"กก.",price:0,itemId:"",addQty:0,cat:""});
 function openBuy(b){
   editingBuy=b||null; pendingPhotos.forEach(p=>URL.revokeObjectURL(p.url)); pendingPhotos=[]; drawThumbs();
   $("#bTitle").textContent=b?"รายการซื้อเข้า":"บันทึกการซื้อเข้า"; $("#bDel").hidden=!b;
   const kind=b?.kind||"used"; fb.querySelector(`[name=kind][value=${kind}]`).checked=true;
   fb.seller.value=b?.seller||""; fb.phone.value=b?.phone||""; fb.billNo.value=b?.billNo||"";
   fb.date.value=b?.date?isoDate(b.date):today(); fb.note.value=b?.note||"";
-  blines=b?legacyLines(b):[blankBLine()];
+  blines=b?legacyLines(b):[blankBLine(kind)];
   $("#bImg").hidden=true;
   const ids=b?(b.photoIds||(b.photoId?[b.photoId]:[])):[];
   ids.forEach((id,i)=>{ const im=document.createElement("img"); im.src=assetUrl(id); im.alt="หน้า "+(i+1); im.onclick=()=>{ $("#iBig").src=im.src; $("#dImg").showModal(); }; $("#bThumbs").appendChild(im); });
@@ -494,23 +501,32 @@ function openBuy(b){
   $("#bRead").hidden=true; drawBLines(); $("#dBuy").showModal();
 }
 const isoDate=t=>{ const d=new Date(t); return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
-function stockOptions(sel){
-  return `<option value="">— ไม่เข้าสต็อก —</option>`+[...items].sort((a,c)=>String(a.name).localeCompare(String(c.name),"th"))
-    .map(i=>`<option value="${esc(i.id)}" ${i.id===sel?"selected":""}>${esc(i.name)} ${esc(i.spec)} (${esc(i.unit)})</option>`).join("");
+function buyCatOptions(sel){
+  return `<option value="">— ไม่เข้าสต็อก —</option>`+
+    CATS.map(c=>`<option value="${esc(c)}" ${c===sel?"selected":""}>เข้าหมวด: ${esc(c)}</option>`).join("");
 }
 function drawBLines(){
   const locked=!!editingBuy;
+  const stockNames=[...new Set(items.flatMap(it=>{
+    const n=String(it.name||"").trim(), s=String(it.spec||"").trim();
+    return s?[n,`${n} ${s}`]:[n];
+  }).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"th"));
+
   $("#bLines").innerHTML=blines.map((l,i)=>`
     <div class="pline" data-i="${i}">
-      <input class="nm${wc(l,"desc")}" data-k="desc" value="${esc(l.desc)}" placeholder="รายการ เช่น เหล็กกล่อง 2x4 หนา 2.3 / เศษเหล็กหนา" maxlength="100">
+      <input class="nm${wc(l,"desc")}" data-k="desc" list="stockItemNames" value="${esc(l.desc)}" placeholder="รายการ เช่น แท่งเหล็ก / เหล็กกล่อง 2x4 หนา 2.3" maxlength="100">
       <input class="${wc(l,"qty")}" data-k="qty" type="number" inputmode="decimal" min="0" step="any" value="${l.qty||""}" placeholder="จำนวน" aria-label="จำนวน">
       <input class="${wc(l,"unit")}" data-k="unit" list="unitList" value="${esc(l.unit)}" placeholder="หน่วย" maxlength="10">
       <input class="${wc(l,"price")}" data-k="price" type="number" inputmode="decimal" min="0" step="any" value="${l.price||""}" placeholder="ราคา/หน่วย" aria-label="ราคาต่อหน่วย">
       <button type="button" class="rm" data-rm="${i}" aria-label="ลบรายการ" ${locked?"hidden":""}>×</button>
-      <div class="stk"><select data-k="itemId" ${locked?"disabled":""} aria-label="เข้าสต็อกสินค้า">${stockOptions(l.itemId)}</select>
-        <input data-k="addQty" type="number" inputmode="decimal" min="0" step="any" value="${l.addQty||""}" placeholder="จำนวนเข้าสต็อก" ${locked?"disabled":""} aria-label="จำนวนเข้าสต็อก"></div>
+      <div class="stk">
+        <select data-k="cat" ${locked?"disabled":""} aria-label="หมวดหมู่สินค้าในสต็อก">${buyCatOptions(l.cat)}</select>
+        <input data-k="addQty" type="number" inputmode="decimal" min="0" step="any" value="${l.addQty||""}" placeholder="${l.cat?'จำนวนเข้าสต็อก':'ไม่เข้าสต็อก'}" ${locked||!l.cat?"disabled":""} aria-label="จำนวนเข้าสต็อก">
+      </div>
       <div class="sub">รวม <span class="num">${money((+l.qty||0)*(+l.price||0))}</span> บาท</div>
-    </div>`).join("")+`<datalist id="unitList">${UNITS.map(u=>`<option>${u}</option>`).join("")}</datalist>`;
+    </div>`).join("")+
+    `<datalist id="unitList">${UNITS.map(u=>`<option>${u}</option>`).join("")}</datalist>`+
+    `<datalist id="stockItemNames">${stockNames.map(n=>`<option value="${esc(n)}"></option>`).join("")}</datalist>`;
   buyTotal();
 }
 const bSum=()=>blines.reduce((s,l)=>s+(+l.qty||0)*(+l.price||0),0);
@@ -518,8 +534,62 @@ function buyTotal(){ $("#bTotal").textContent=money(bSum()); }
 $("#bLines").addEventListener("input",e=>{
   const row=e.target.closest("[data-i]"); if(!row) return; const l=blines[+row.dataset.i], k=e.target.dataset.k; if(!k) return;
   l[k]=["qty","price","addQty"].includes(k)?(+e.target.value||0):e.target.value; if(l._w) delete l._w[k];
-  if(k==="itemId"){ const it=items.find(x=>x.id===l.itemId); if(it&&!l.addQty){ l.addQty = it.unit===l.unit ? l.qty : 0; row.querySelector("[data-k=addQty]").value=l.addQty||""; } }
+
+  if(k==="desc"){
+    const raw=String(l.desc||"").trim().toLowerCase();
+    const existing=items.find(x=>{
+      const n=String(x.name||"").trim().toLowerCase();
+      const full=`${n} ${String(x.spec||"").trim().toLowerCase()}`.trim();
+      return n===raw || full===raw;
+    });
+    if(existing){
+      if(!l.cat && existing.cat){
+        l.cat=existing.cat;
+        const sel=row.querySelector("[data-k=cat]"); if(sel) sel.value=l.cat;
+        const addInp=row.querySelector("[data-k=addQty]");
+        if(addInp){
+          addInp.disabled=false;
+          addInp.placeholder="จำนวนเข้าสต็อก";
+          if(!l.addQty && l.qty){ l.addQty=l.qty; l._syncQty=true; addInp.value=l.addQty||""; }
+        }
+      }
+      if(existing.unit && (!l.unit || l.unit==="กก." || l.unit==="เส้น")){
+        l.unit=existing.unit;
+        const uInp=row.querySelector("[data-k=unit]"); if(uInp) uInp.value=l.unit;
+      }
+    }
+  }
+
+  if(k==="qty"){
+    if(l.cat && (l._syncQty!==false || !l.addQty)){
+      l.addQty=l.qty; l._syncQty=true;
+      const addInp=row.querySelector("[data-k=addQty]"); if(addInp) addInp.value=l.addQty||"";
+    }
+  }
+
+  if(k==="addQty"){
+    l._syncQty=false;
+  }
+
   row.querySelector(".sub .num").textContent=money((+l.qty||0)*(+l.price||0)); buyTotal();
+});
+
+$("#bLines").addEventListener("change",e=>{
+  const row=e.target.closest("[data-i]"); if(!row) return; const l=blines[+row.dataset.i], k=e.target.dataset.k; if(!k) return;
+  if(k==="cat"){
+    l.cat=e.target.value;
+    const addInp=row.querySelector("[data-k=addQty]");
+    if(l.cat){
+      if(addInp){
+        addInp.disabled=false;
+        addInp.placeholder="จำนวนเข้าสต็อก";
+        if(!l.addQty && l.qty){ l.addQty=l.qty; l._syncQty=true; addInp.value=l.addQty||""; }
+      }
+    } else {
+      l.addQty=0; l._syncQty=false;
+      if(addInp){ addInp.value=""; addInp.placeholder="ไม่เข้าสต็อก"; addInp.disabled=true; }
+    }
+  }
 });
 $("#bLines").addEventListener("click",e=>{ const r=e.target.dataset.rm; if(r!==undefined){ blines.splice(+r,1); if(!blines.length) blines.push(blankBLine()); drawBLines(); } });
 $("#bAdd").addEventListener("click",()=>{ blines.push(blankBLine()); drawBLines(); });
@@ -754,8 +824,10 @@ fb.addEventListener("submit",async e=>{
   if(!fb.seller.value.trim()){ warnInput(fb.seller,"ใส่ชื่อผู้ขาย"); fb.seller.focus(); return; }
   if(!fb.date.value) fb.date.value=today();
   const nW=fb.querySelectorAll(".warn").length; if(nW&&!confirm(`ยังมี ${nW} ช่องสีแดงที่ยังไม่ได้ตรวจ บันทึกเลยไหม?`)) return;
-  const ls=blines.filter(l=>String(l.desc).trim()&&(+l.qty||0)>0).map(l=>({desc:String(l.desc).trim(),qty:+l.qty,unit:l.unit||"",price:+l.price||0,
-    itemId:l.itemId||"",addQty:l.itemId?(+l.addQty||0):0,...(l.grade?{grade:l.grade}:{})}));
+  const ls=blines.filter(l=>String(l.desc).trim()&&(+l.qty||0)>0).map(l=>({
+    desc:String(l.desc).trim(),qty:+l.qty,unit:l.unit||"",price:+l.price||0,
+    cat:l.cat||"",itemId:l.itemId||"",addQty:l.cat?(+l.addQty||0):0,...(l.grade?{grade:l.grade}:{})
+  }));
   if(!ls.length) return toast("ใส่รายการอย่างน้อย 1 รายการ (ชื่อ + จำนวน)");
   const saveBtn=$("#bSave"); saveBtn.disabled=true;
   const kind=fb.querySelector("[name=kind]:checked").value, total=Math.round(ls.reduce((s,l)=>s+l.qty*l.price,0)*100)/100;
@@ -768,18 +840,66 @@ fb.addEventListener("submit",async e=>{
       if(ids.length){ v.photoIds=ids; v.photoId=ids[0]; } if(ids.length<pendingPhotos.length) toast("แนบรูปไม่ครบ"); }
     if(editingBuy){
       const keep=legacyLines(editingBuy);
-      v.lines=ls.map((l,i)=>({...(keep[i]||{}),...l,itemId:keep[i]?.itemId||"",addQty:keep[i]?.addQty||0}));
+      v.lines=ls.map((l,i)=>({...(keep[i]||{}),...l,itemId:keep[i]?.itemId||l.itemId||"",addQty:keep[i]?.addQty??l.addQty,cat:l.cat||keep[i]?.cat||""}));
       const {id:_old,...prev}=editingBuy; await store.set("buys/"+editingBuy.id,{...prev,...v,at:editingBuy.at||Date.now(),photoId:v.photoId||editingBuy.photoId||"",photoIds:v.photoIds||editingBuy.photoIds||[]});
     }else{
       v.at=Date.now(); const local={};
-      for(const l of ls){ if(l.grade&&!l.itemId){ const gi=await gradeItem(l.grade); l.itemId=gi.id; l.addQty=l.qty; local[gi.id]=local[gi.id]||{...gi}; } }
       for(const l of ls){
-        if(!l.itemId||!(l.addQty>0)) continue;
-        const it=local[l.itemId]||{...items.find(i=>i.id===l.itemId)}; if(!it.id) continue;
-        const oq=+it.qty||0, oc=+it.cost||0, nq=oq+l.addQty, lineTotal=l.qty*l.price;
-        it.cost=Math.round((oq>0&&oc>0 ? (oq*oc+lineTotal)/nq : lineTotal/l.addQty)*100)/100; it.qty=nq; local[it.id]=it;
-        await store.update("items/"+it.id,{qty:nq,cost:it.cost,updatedAt:Date.now()});
-        await addMove({type:"in",qty:l.addQty,itemId:it.id,name:it.name,note:`${kind==="used"?"รับซื้อเก่า":"ซื้อใหม่"}จาก ${v.seller}${v.billNo?" บิล "+v.billNo:""}`,at:v.at});
+        if(l.grade&&!l.itemId){
+          const gi=await gradeItem(l.grade);
+          l.itemId=gi.id;
+          l.cat=gi.cat||"อื่นๆ";
+          l.addQty=l.qty;
+          local[gi.id]=local[gi.id]||{...gi};
+        }
+      }
+      for(const l of ls){
+        if(!l.cat||!(l.addQty>0)){ l.itemId=""; continue; }
+        const descTrim=l.desc.trim().toLowerCase();
+        let it=(l.itemId&&local[l.itemId])||
+               (l.itemId&&items.find(i=>i.id===l.itemId))||
+               Object.values(local).find(x=>{
+                 const n=String(x.name||"").trim().toLowerCase();
+                 const full=`${n} ${String(x.spec||"").trim().toLowerCase()}`.trim();
+                 return n===descTrim || full===descTrim;
+               })||
+               items.find(x=>{
+                 const n=String(x.name||"").trim().toLowerCase();
+                 const full=`${n} ${String(x.spec||"").trim().toLowerCase()}`.trim();
+                 return n===descTrim || full===descTrim;
+               });
+
+        if(it){
+          const oq=+it.qty||0, oc=+it.cost||0, nq=oq+l.addQty, lineTotal=l.qty*l.price;
+          const newCost=Math.round((oq>0&&oc>0 ? (oq*oc+lineTotal)/nq : (l.addQty>0 ? lineTotal/l.addQty : oc))*100)/100;
+          it.qty=nq; it.cost=newCost; if(l.cat) it.cat=l.cat; local[it.id]=it; l.itemId=it.id;
+          await store.update("items/"+it.id,{qty:nq,cost:newCost,cat:it.cat,updatedAt:Date.now()});
+          await addMove({type:"in",qty:l.addQty,itemId:it.id,name:it.name,note:`${kind==="used"?"รับซื้อเก่า":"ซื้อใหม่"}จาก ${v.seller}${v.billNo?" บิล "+v.billNo:""}`,at:v.at});
+        }else{
+          const newId=uid();
+          const lineTotal=l.qty*l.price;
+          const cost=l.addQty>0 ? Math.round((lineTotal/l.addQty)*100)/100 : (l.price||0);
+          const newItem={
+            id:newId,
+            name:l.desc.trim(),
+            cat:l.cat,
+            cond:kind==="used"?"used":"new",
+            spec:"",
+            qty:l.addQty,
+            unit:l.unit||(kind==="new"?"เส้น":"กก."),
+            kg:0,
+            min:0,
+            cost:cost,
+            price:0,
+            loc:"",
+            rem:[],
+            updatedAt:Date.now()
+          };
+          local[newId]=newItem; l.itemId=newId;
+          const {id:_ignore,...itemDoc}=newItem;
+          await store.set("items/"+newId,itemDoc);
+          await addMove({type:"in",qty:l.addQty,itemId:newId,name:newItem.name,note:`${kind==="used"?"รับซื้อเก่า":"ซื้อใหม่"}จาก ${v.seller}${v.billNo?" บิล "+v.billNo:""}`,at:v.at});
+        }
       }
       await store.set("buys/"+uid(),v);
     }
