@@ -541,7 +541,7 @@ function drawBLines(){
         </label>
         <label class="pline-field stk-qty">
           <span class="pline-lbl">จำนวนเข้าสต็อก</span>
-          <input data-k="addQty" type="number" inputmode="decimal" min="0" step="any" value="${l.addQty||""}" placeholder="${l.cat?'จำนวนเข้าสต็อก':'ไม่เข้าสต็อก'}" ${locked||!l.cat?"disabled":""} aria-label="จำนวนเข้าสต็อก">
+          <input data-k="addQty" type="number" inputmode="decimal" min="0" step="any" value="${l.addQty||""}" placeholder="${l.cat?'เช่น 50 แท่ง':'ไม่เข้าสต็อก'}" ${locked||!l.cat?"disabled":""} aria-label="จำนวนเข้าสต็อก">
         </label>
       </div>
       <div class="sub">รวม <span class="num">${money((+l.qty||0)*(+l.price||0))}</span> บาท</div>
@@ -553,17 +553,6 @@ function buyTotal(){ $("#bTotal").textContent=money(bSum()); }
 $("#bLines").addEventListener("input",e=>{
   const row=e.target.closest("[data-i]"); if(!row) return; const l=blines[+row.dataset.i], k=e.target.dataset.k; if(!k) return;
   l[k]=["qty","price","addQty"].includes(k)?(+e.target.value||0):e.target.value; if(l._w) delete l._w[k];
-
-  if(k==="qty"){
-    if(l.cat && (l._syncQty!==false || !l.addQty)){
-      l.addQty=l.qty; l._syncQty=true;
-      const addInp=row.querySelector("[data-k=addQty]"); if(addInp) addInp.value=l.addQty||"";
-    }
-  }
-
-  if(k==="addQty"){
-    l._syncQty=false;
-  }
 
   row.querySelector(".sub .num").textContent=money((+l.qty||0)*(+l.price||0)); buyTotal();
 });
@@ -579,11 +568,10 @@ $("#bLines").addEventListener("change",e=>{
     if(l.cat){
       if(addInp){
         addInp.disabled=false;
-        addInp.placeholder="จำนวนเข้าสต็อก";
-        if(!l.addQty && l.qty){ l.addQty=l.qty; l._syncQty=true; addInp.value=l.addQty||""; }
+        addInp.placeholder="เช่น 50 แท่ง";
       }
     } else {
-      l.addQty=0; l._syncQty=false;
+      l.addQty=0;
       if(addInp){ addInp.value=""; addInp.placeholder="ไม่เข้าสต็อก"; addInp.disabled=true; }
     }
   }
